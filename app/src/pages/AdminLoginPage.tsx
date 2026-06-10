@@ -72,7 +72,6 @@ export function AdminLoginPage() {
               </label>
               <input
                 type="email"
-                required
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 className="w-full h-11 border border-[#D4CFC6] rounded-xl px-4 text-sm bg-white outline-none focus:border-[#8FAE7B] focus:ring-2 focus:ring-[#8FAE7B]/20 transition-all"
