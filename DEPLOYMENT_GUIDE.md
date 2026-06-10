@@ -16,6 +16,34 @@ Your Miniyo project is a **full-stack Node.js application**, not a static HTML w
 
 ---
 
+## Environment Variables (CRITICAL - Do This First!)
+
+Before deploying, you MUST set all environment variables. See **ENV_SETUP.md** in this folder for:
+- Complete list of all required variables
+- Where each value comes from
+- How to set them in your hosting control panel
+- The difference between build-time and runtime variables
+
+**Quick reference of required variables:**
+
+| Variable | Purpose |
+|----------|---------|
+| `NODE_ENV` | Set to `production` |
+| `APP_ID` | Your Kimi application ID |
+| `APP_SECRET` | Your Kimi application secret |
+| `DATABASE_URL` | MySQL connection URL |
+| `KIMI_AUTH_URL` | `https://auth.kimi.com` |
+| `KIMI_OPEN_URL` | `https://open.kimi.com` |
+| `VITE_APP_ID` | Same as APP_ID (for frontend) |
+| `VITE_KIMI_AUTH_URL` | Same as KIMI_AUTH_URL (for frontend) |
+| `ADMIN_PASSWORD` | Your admin login password |
+| `ADMIN_EMAIL` | Admin email address |
+| `OWNER_UNION_ID` | Your Kimi Union ID |
+
+> **IMPORTANT:** Variables prefixed with `VITE_` and `ADMIN_PASSWORD` must be available **during the build step** (`npm run build`), not just at runtime. If your hosting platform only sets env vars at runtime, create a `.env` file in the project root before building.
+
+---
+
 ## Recommended Platform: Railway (Best for This Project)
 
 **Railway** is the best choice because:
