@@ -14,7 +14,7 @@ export function serveStaticFiles(app: App) {
   // Resolve dist/public relative to this file's location in the bundle
   // When bundled to dist/boot.js, this file resolves to dist/<bundled>,
   // so ../dist/public points to the correct output directory.
-  const distPath = path.resolve(__dirname, "../dist/public/app");
+  const distPath = path.resolve(__dirname, "../dist/public");
 
   app.use("*", serveStatic({ root: distPath }));
 
@@ -23,7 +23,7 @@ export function serveStaticFiles(app: App) {
     if (!accept.includes("text/html")) {
       return c.json({ error: "Not Found" }, 404);
     }
-    const indexPath = path.resolve(distPath, "index.html");
+    const indexPath = path.resolve(distPath, "app/index.html");
     const content = fs.readFileSync(indexPath, "utf-8");
     return c.html(content);
   });
