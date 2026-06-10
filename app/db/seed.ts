@@ -6,8 +6,8 @@ import { hashPassword } from "../api/local-auth";
 import "dotenv/config";
 
 const DATABASE_URL = process.env.DATABASE_URL!;
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "miniyo.store.lb@gmail.com";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+const ADMIN_EMAIL = "admin@miniyo.store";
+const ADMIN_PASSWORD = "Admin@12345";
 
 async function seed() {
   console.log("Connecting to database...");
@@ -16,19 +16,17 @@ async function seed() {
 
   // ── 1. Seed Admin User ──
   console.log("Seeding admin user...");
-  const existingAdmin = await db.select().from(schema.users)
-    .where(eq(schema.users.email, ADMIN_EMAIL))
+  const existingAdmin = await db.select().from(schema.adminUsers)
+    .where(eq(schema.adminUsers.email, ADMIN_EMAIL))
     .limit(1);
 
   if (existingAdmin.length === 0) {
-    await db.insert(schema.users).values({
+    await db.insert(schema.adminUsers).values({
       email: ADMIN_EMAIL,
       passwordHash: await hashPassword(ADMIN_PASSWORD),
-      name: "Omran",
-      phone: "+961 81 38 59 40",
-      role: "super_admin",
+      passwordSetAt: new Date(),
     });
-    console.log(`Admin user created: ${ADMIN_EMAIL} (super_admin)`);
+    console.log(`Admin user created: ${ADMIN_EMAIL}`);
   } else {
     console.log(`Admin user already exists: ${ADMIN_EMAIL}`);
   }
