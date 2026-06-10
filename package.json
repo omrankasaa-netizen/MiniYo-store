@@ -3,12 +3,16 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build && esbuild api/boot.ts --platform=node --bundle --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\"",
     "lint": "eslint .",
     "preview": "vite preview",
     "seed": "npx tsx db/seed.ts",
+    "prestart": "node -e \"if(!require('fs').existsSync('dist/boot.js')){console.error('ERROR: dist/boot.js not found. Run npm run build first.');process.exit(1)}\"",
     "start": "NODE_ENV=production node dist/boot.js",
     "check": "tsc -b",
     "format": "prettier --write .",

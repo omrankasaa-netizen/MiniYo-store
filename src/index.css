@@ -1,0 +1,284 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Poppins:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 38 33% 93%;
+    --foreground: 160 34% 26%;
+    --card: 0 0% 100%;
+    --card-foreground: 160 34% 26%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 160 34% 26%;
+    --primary: 30 25% 76%;
+    --primary-foreground: 160 34% 26%;
+    --secondary: 38 25% 88%;
+    --secondary-foreground: 160 34% 26%;
+    --muted: 38 25% 88%;
+    --muted-foreground: 155 14% 48%;
+    --accent: 100 25% 58%;
+    --accent-foreground: 160 34% 26%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 18% 78%;
+    --input: 30 18% 78%;
+    --ring: 100 25% 58%;
+    --radius: 0.75rem;
+    --sidebar-background: 160 34% 26%;
+    --sidebar-foreground: 38 33% 93%;
+    --sidebar-primary: 100 25% 58%;
+    --sidebar-primary-foreground: 160 34% 26%;
+    --sidebar-accent: 160 30% 30%;
+    --sidebar-accent-foreground: 38 33% 93%;
+    --sidebar-border: 160 30% 30%;
+    --sidebar-ring: 100 25% 58%;
+  }
+
+  * {
+    @apply border-border-beige;
+  }
+
+  body {
+    @apply bg-cream text-dark-teal font-body antialiased;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .shimmer {
+    background: linear-gradient(90deg, #E8E0D4 25%, #F5F0E6 50%, #E8E0D4 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #8FAE7B #D4C9B8;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: #D4C9B8;
+    border-radius: 3px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #8FAE7B;
+    border-radius: 3px;
+  }
+}
+
+/* ── Print Styles ── */
+@media print {
+  /* Hide navigation and UI chrome */
+  aside, nav, .sidebar, .admin-sidebar,
+  button:not(.print-keep),
+  .ToastContainer,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Reset layout for printing */
+  body {
+    background: white !important;
+    color: #2D5A4C !important;
+    font-size: 10pt;
+    line-height: 1.4;
+  }
+
+  .min-h-screen {
+    min-height: auto !important;
+  }
+
+  /* Make main content area full-width */
+  .flex-1 {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Background reset */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Tables - clean print */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  th, td {
+    border: 1px solid #D4CFC6 !important;
+    padding: 6px 8px !important;
+    text-align: left !important;
+    font-size: 9pt !important;
+  }
+
+  th {
+    background: #F2EFE9 !important;
+    font-weight: 600 !important;
+    color: #2D5A4C !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tbody tr:nth-child(even) {
+    background: #FAFAF7 !important;
+  }
+
+  /* Cards/boxes - match Tailwind bg utility classes */
+  .bg-white,
+  .bg-cream {
+    background: #FAFAF7 !important;
+  }
+
+  .rounded-xl, .rounded-2xl, .rounded-lg {
+    border: 1px solid #D4CFC6 !important;
+    border-radius: 6px !important;
+  }
+
+  /* Shadows off */
+  .shadow-lg, .shadow-sm, .shadow-2xl {
+    box-shadow: none !important;
+  }
+
+  /* Section headers in print */
+  .print-section-header {
+    font-size: 14pt !important;
+    font-weight: 700 !important;
+    color: #2D5A4C !important;
+    margin-bottom: 12px !important;
+    padding-bottom: 4px !important;
+    border-bottom: 2px solid #2D5A4C !important;
+  }
+
+  /* Page breaks */
+  .print-break-before {
+    page-break-before: always !important;
+  }
+
+  .print-break-after {
+    page-break-after: always !important;
+  }
+
+  .print-break-inside {
+    page-break-inside: avoid !important;
+  }
+
+  /* Status badges - keep colors but cleaner */
+  .rounded-full {
+    border-radius: 4px !important;
+  }
+
+  /* Links - show URL */
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 7pt;
+    color: #8B8578;
+  }
+
+  /* Reduce spacing */
+  .space-y-4 > * + * {
+    margin-top: 12px !important;
+  }
+
+  .space-y-2 > * + * {
+    margin-top: 6px !important;
+  }
+
+  /* Print header watermark */
+  @page {
+    margin: 1.5cm 1.5cm 2cm 1.5cm;
+  }
+}
+
+/* ── Order Detail Modal Print Styles ── */
+@media print {
+  /* Order modal container - remove dark overlay, make clean */
+  .order-detail-modal-container {
+    background: white !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+    z-index: 99999 !important;
+  }
+
+  /* Order modal card - full width clean print */
+  .order-detail-modal {
+    max-width: 100% !important;
+    width: 100% !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+  }
+
+  /* Modal header - clean for print */
+  .order-detail-modal-header {
+    background: white !important;
+    border-bottom: 2px solid #2D5A4C !important;
+    padding: 12px 16px !important;
+    border-radius: 0 !important;
+  }
+
+  /* Hide status badge background in print */
+  .order-detail-modal-header span[class*="rounded-full"] {
+    background: none !important;
+    border: 1px solid #D4CFC6 !important;
+    color: #2D5A4C !important;
+  }
+
+  /* Print-only header inside modal */
+  .order-detail-modal .print-only {
+    display: block !important;
+  }
+
+  /* Modal body */
+  .order-detail-modal-body {
+    padding: 16px !important;
+  }
+
+  /* WhatsApp link - clean in print */
+  .order-detail-modal-body a[href^="https://wa.me"] {
+    color: #2D5A4C !important;
+    text-decoration: none !important;
+  }
+  .order-detail-modal-body a[href^="https://wa.me"]::after {
+    content: none !important;
+  }
+}
+
+/* ── Print Header (visible only in print) ── */
+.print-only {
+  display: none !important;
+}
+
+@media print {
+  .print-only {
+    display: block !important;
+  }
+}
