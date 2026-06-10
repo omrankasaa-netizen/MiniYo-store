@@ -5,6 +5,7 @@
     "buildCommand": "npm run build"
   },
   "deploy": {
+    "preDeployCommand": "npm run seed",
     "startCommand": "NODE_ENV=production node dist/boot.js",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 30,
