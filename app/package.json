@@ -17,7 +17,8 @@
     "check": "tsc -b",
     "format": "prettier --write .",
     "test": "vitest run",
-    "db:push": "npx tsx db/push-schema.ts"
+    "db:push": "npx tsx db/push-schema.ts",
+    "setup-admin": "npx tsx scripts/setup-admin.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
