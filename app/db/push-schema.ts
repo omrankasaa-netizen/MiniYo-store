@@ -1,4 +1,5 @@
 import mysql from "mysql2/promise";
+import bcrypt from "bcryptjs";
 import "dotenv/config";
 
 const DATABASE_URL = process.env.DATABASE_URL!;
@@ -418,6 +419,24 @@ async function pushSchema() {
       console.error(`  Failed: ${err.sqlMessage || err.message}`);
       throw err;
     }
+  }
+
+  // Seed initial admin user if none exist
+  const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+    "SELECT COUNT(*) AS count FROM admin_users"
+  );
+  const adminCount = rows[0].count as number;
+
+  if (adminCount === 0) {
+    console.log("Seeding initial admin user...");
+    const passwordHash = await bcrypt.hash("Admin@12345", 12);
+    await pool.execute(
+      "INSERT INTO admin_users (email, passwordHash, passwordSetAt) VALUES (?, ?, NOW())",
+      ["admin@miniyo.store", passwordHash]
+    );
+    console.log("  Admin user created: admin@miniyo.store");
+  } else {
+    console.log("Admin user already exists, skipping seed.");
   }
 
   await pool.end();
