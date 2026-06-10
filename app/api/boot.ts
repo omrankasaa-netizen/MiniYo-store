@@ -12,6 +12,14 @@ import { setupAdmin } from "./setup-admin";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
+// Initialize admin user on startup
+setupAdmin().then(result => {
+  console.log("[boot] Admin init:", result.message);
+}).catch(err => {
+  console.error("[boot] Failed to initialize admin user:", err);
+  // Don't exit - app can still run
+});
+
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 
 // CORS middleware for API routes
