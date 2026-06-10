@@ -8,6 +8,7 @@ import { env } from "./lib/env";
 import { createOAuthCallbackHandler } from "./kimi/auth";
 import { Paths } from "@contracts/constants";
 import { handleAdminLogin } from "./admin-login-handler";
+import { setupAdmin } from "./setup-admin";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
@@ -68,6 +69,17 @@ app.post("/api/admin/login", async (c) => {
   } catch (err) {
     console.error("[admin-login] Unexpected error:", err);
     return c.json({ success: false, error: "Internal server error" }, 500);
+  }
+});
+
+// Manual admin setup endpoint — creates or resets admin@miniyo.store
+app.post("/api/setup-admin", async (c) => {
+  try {
+    const result = await setupAdmin();
+    return c.json(result, result.success ? 200 : 500);
+  } catch (err) {
+    console.error("[setup-admin] Unexpected error:", err);
+    return c.json({ success: false, message: "Internal server error" }, 500);
   }
 });
 
