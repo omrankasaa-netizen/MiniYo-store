@@ -9,6 +9,20 @@ import { createOAuthCallbackHandler } from "./kimi/auth";
 import { Paths } from "@contracts/constants";
 import { handleAdminLogin } from "./admin-login-handler";
 import { setupAdmin } from "./setup-admin";
+import { runMigration001 } from "../db/migrations/001-init-admin";
+
+// Run startup migrations — failures are logged but never crash the server.
+runMigration001()
+  .then((result) => {
+    if (result.success) {
+      console.log(result.message);
+    } else {
+      console.error(result.message);
+    }
+  })
+  .catch((err) => {
+    console.error("[migration-001] Unexpected error:", err);
+  });
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
