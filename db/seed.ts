@@ -17,20 +17,20 @@ async function seed() {
   // ── 1. Seed Admin User ──
   console.log("Seeding admin user...");
   const existingAdmin = await db.select().from(schema.users)
-    .where(eq(schema.users.email, admin@miniyo.store))
+    .where(eq(schema.users.email, ADMIN_EMAIL))
     .limit(1);
 
   if (existingAdmin.length === 0) {
     await db.insert(schema.users).values({
-      email: admin@miniyo.store,
-      passwordHash: await hashPassword(Nimc#3477),
+      email: ADMIN_EMAIL,
+      passwordHash: await hashPassword(ADMIN_PASSWORD),
       name: "Omran",
       phone: "+961 81 38 59 40",
       role: "super_admin",
     });
-    console.log(`Admin user created: ${admin@miniyo.store} (super_admin)`);
+    console.log(`Admin user created: ${ADMIN_EMAIL} (super_admin)`);
   } else {
-    console.log(`Admin user already exists: ${admin@miniyo.store}`);
+    console.log(`Admin user already exists: ${ADMIN_EMAIL}`);
   }
 
   // ── 2. Seed Categories ──
