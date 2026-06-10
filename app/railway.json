@@ -4,6 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
+    "preDeployCommand": "npx tsx db/seed-admin.ts",
     "startCommand": "NODE_ENV=production node dist/boot.js",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 30,
