@@ -9,20 +9,32 @@ import { createOAuthCallbackHandler } from "./kimi/auth";
 import { Paths } from "@contracts/constants";
 import { handleAdminLogin } from "./admin-login-handler";
 import { setupAdmin } from "./setup-admin";
-import { runMigration001 } from "../db/migrations/001-init-admin";
 
-// Run startup migrations — failures are logged but never crash the server.
-runMigration001()
-  .then((result) => {
-    if (result.success) {
-      console.log(result.message);
-    } else {
-      console.error(result.message);
-    }
-  })
-  .catch((err) => {
-    console.error("[migration-001] Unexpected error:", err);
-  });
+/**
+ * ADMIN AUTHENTICATION ARCHITECTURE
+ * =================================
+ *
+ * Single Source of Truth: admin_users table only
+ *
+ * Admin provisioning flow:
+ * 1. Railway deployment: scripts/setup-admin.ts runs in preDeployCommand
+ *    - Deterministic bootstrap: creates/resets admin@miniyo.store in admin_users
+ *    - Fails loudly with exit code 1 on error (prevents app startup on failure)
+ *
+ * 2. Runtime: /api/setup-admin endpoint
+ *    - Manual trigger for emergency recovery or local dev
+ *    - POST request creates/resets admin password
+ *
+ * 3. Login: /api/admin/login endpoint
+ *    - Queries admin_users only (never users table)
+ *    - Validates bcrypt hash, issues miniyo_admin_session cookie
+ *
+ * Why this design:
+ * - users table is reserved for storefront/customer identities only
+ * - admin_users is isolated, audit-safe, never conflates permissions
+ * - No silent failures: bootstrap logs clearly on startup
+ * - Prevents sync issues between multiple admin creation paths
+ */
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
@@ -60,7 +72,9 @@ app.use("/api/trpc/*", async (c) => {
     createContext,
   });
 });
+
 // Direct admin login endpoint — bypasses tRPC router
+// Validates credentials against admin_users table only
 app.post("/api/admin/login", async (c) => {
   let body: { email?: string; password?: string };
   try {
@@ -86,7 +100,9 @@ app.post("/api/admin/login", async (c) => {
   }
 });
 
-// Manual admin setup endpoint — creates or resets admin@miniyo.store
+// Manual admin setup endpoint — emergency recovery or manual provisioning
+// Creates or resets admin@miniyo.store in admin_users
+// Safe to call multiple times (idempotent)
 app.post("/api/setup-admin", async (c) => {
   try {
     const result = await setupAdmin();
