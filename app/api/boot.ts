@@ -97,6 +97,19 @@ app.post("/api/setup-admin", async (c) => {
   }
 });
 
+// Unauthenticated admin initialization endpoint
+// This endpoint allows anyone to initialize the admin user
+// It should only work if no admin users exist yet
+app.post("/api/init-admin", async (c) => {
+  try {
+    const result = await setupAdmin();
+    return c.json(result, result.success ? 200 : 500);
+  } catch (err) {
+    console.error("[init-admin] Error:", err);
+    return c.json({ success: false, message: "Failed to initialize admin" }, 500);
+  }
+});
+
 app.all("/api/*", (c) => c.json({ error: "Not Found" }, 404));
 
 // Health check endpoint for deployment platforms
