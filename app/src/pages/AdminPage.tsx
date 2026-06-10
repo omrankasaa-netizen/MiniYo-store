@@ -23,7 +23,7 @@ export type AdminView =
 
 export function AdminPage() {
   const navigate = useNavigate()
-  const { admin, isLoading, isAuthenticated, needsSetup, logout } = useAdminAuth()
+  const { admin, isLoading, isAuthenticated, logout } = useAdminAuth()
   const importPending = useAdminStore(s => s.importPending)
   const [view, setView] = useState<AdminView>('dashboard')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -33,10 +33,6 @@ export function AdminPage() {
   // Redirect to appropriate page based on auth state
   useEffect(() => {
     if (isLoading) return
-    if (needsSetup) {
-      navigate('/admin/setup-password')
-      return
-    }
     if (!isAuthenticated) {
       navigate('/admin/login')
       return
@@ -52,7 +48,7 @@ export function AdminPage() {
         : `Updated stock for ${result.stockProductsUpdated} product${result.stockProductsUpdated > 1 ? 's' : ''}`
       )
     }
-  }, [isLoading, isAuthenticated, needsSetup, navigate, importPending])
+  }, [isLoading, isAuthenticated, navigate, importPending])
 
   // Also listen for storage events (other tabs)
   useEffect(() => {

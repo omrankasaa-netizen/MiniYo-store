@@ -1,15 +1,15 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Eye, EyeOff, ShieldCheck } from 'lucide-react'
-import { adminLogin } from '@/lib/adminAuth'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
 
 export function AdminLoginPage() {
   const navigate = useNavigate()
+  const { login, isLoading } = useAdminAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -20,17 +20,13 @@ export function AdminLoginPage() {
       return
     }
 
-    setIsLoading(true)
-
     try {
-      const result = await adminLogin(email, password)
+      const result = await login(email, password)
       if (result.success) {
         navigate('/admin')
       }
     } catch (err: any) {
       setError(err.message || 'Login failed')
-    } finally {
-      setIsLoading(false)
     }
   }
 
