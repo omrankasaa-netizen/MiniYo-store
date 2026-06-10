@@ -23,7 +23,7 @@ export function serveStaticFiles(app: App) {
     if (!accept.includes("text/html")) {
       return c.json({ error: "Not Found" }, 404);
     }
-    const indexPath = path.resolve(distPath, "index.html");
+    const indexPath = path.resolve(distPath, "app/index.html");
     const content = fs.readFileSync(indexPath, "utf-8");
     return c.html(content);
   });
