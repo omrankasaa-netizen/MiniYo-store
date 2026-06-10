@@ -5,7 +5,7 @@
     "buildCommand": "npm run build"
   },
   "deploy": {
-    "preDeployCommand": "npx tsx db/push-schema.ts && npm run seed",
+    "preDeployCommand": "npx tsx app/db/push-schema.ts && npm run seed && npx tsx app/api/setup-admin.ts",
     "startCommand": "NODE_ENV=production node dist/boot.js",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 30,
