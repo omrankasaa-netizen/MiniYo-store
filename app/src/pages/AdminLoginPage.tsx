@@ -14,6 +14,12 @@ export function AdminLoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    if (!email.trim()) {
+      setError('Email address is required')
+      return
+    }
+
     setIsLoading(true)
 
     try {
@@ -59,7 +65,7 @@ export function AdminLoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-[#5C6B60] mb-1.5">
                 Email address
