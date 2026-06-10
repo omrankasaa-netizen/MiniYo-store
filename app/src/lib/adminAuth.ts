@@ -69,7 +69,17 @@ export async function adminFirstLogin(email: string): Promise<{ success: boolean
 }
 
 export async function adminLogin(email: string, password: string): Promise<{ success: boolean; email: string }> {
-  return callTrpcMutation("adminAuth.login", { email, password });
+  const response = await fetch("/api/admin/login", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await response.json();
+  if (!data?.success) {
+    throw new Error(data?.error || "Login failed");
+  }
+  return { success: data.success, email: data.email };
 }
 
 export async function adminSetupPassword(password: string, confirmPassword: string): Promise<{ success: boolean; email: string }> {
