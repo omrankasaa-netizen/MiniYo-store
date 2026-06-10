@@ -22,6 +22,8 @@ import { FAQPage } from '@/pages/FAQPage'
 import { ContactPage } from '@/pages/ContactPage'
 import { TrackOrderPage } from '@/pages/TrackOrderPage'
 import { AdminPage } from '@/pages/AdminPage'
+import { AdminLoginPage } from '@/pages/AdminLoginPage'
+import { AdminSetupPage } from '@/pages/AdminSetupPage'
 import { WishlistPage } from '@/pages/WishlistPage'
 import { PrivacyPage } from '@/pages/PrivacyPage'
 import { TermsPage } from '@/pages/TermsPage'
@@ -81,6 +83,8 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
 
         {/* Admin Panel */}
         <Route path="/admin" element={<AdminPage />} />
+        <Route path="/admin/login" element={<AdminLoginPage />} />
+        <Route path="/admin/setup-password" element={<AdminSetupPage />} />
 
         {/* Main Storefront */}
         <Route path="/" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><HomePage locale={locale} /></MainLayout>} />

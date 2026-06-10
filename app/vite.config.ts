@@ -6,26 +6,13 @@ const __dirname = path.dirname(__filename)
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import { inspectAttr } from 'kimi-plugin-inspect-react'
-import bcrypt from "bcryptjs"
-
-// ── Admin Password Hash ──
-// Reads ADMIN_PASSWORD from environment, hashes it with bcrypt,
-// injects into frontend bundle as a build-time constant.
-// No plaintext password exists in the bundle — only the hash.
-const adminPassword = process.env.ADMIN_PASSWORD || ""
-const adminPasswordHash = adminPassword ? bcrypt.hashSync(adminPassword, 12) : ""
-if (adminPassword) {
-  console.log("✅ Admin password hash generated")
-} else {
-  console.log("⚠️  ADMIN_PASSWORD not set — admin login disabled")
-}
 
 // https://vite.dev/config/
 export default defineConfig({
   // Explicit root ensures Vite resolves from project dir regardless of cwd
   root: __dirname,
   plugins: [
-    devServer({ entry: "api/boot.ts", exclude: [/^\/(?!api\/).*$/] }),
+    devServer({ entry: "api/boot.ts", exclude: [/^\\/(?!api\\/).*$/] }),
     inspectAttr(), react()
   ],
   server: {
@@ -40,9 +27,6 @@ export default defineConfig({
     },
   },
   envDir: path.resolve(__dirname),
-  define: {
-    __ADMIN_PASSWORD_HASH__: JSON.stringify(adminPasswordHash),
-  },
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,

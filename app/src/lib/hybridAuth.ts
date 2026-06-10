@@ -1,21 +1,14 @@
 /**
- * Hybrid Authentication System
+ * Customer Authentication System (localStorage-based)
  *
- * Admin password hash is injected at BUILD TIME via vite.config.ts define.
- * No plaintext password exists in source code or bundle.
+ * Handles customer registration and login for storefront users.
+ * Admin authentication is handled separately via adminAuth.ts.
  */
 
 import bcrypt from "bcryptjs";
 
-// Injected at build time by vite.config.ts define plugin
-declare const __ADMIN_PASSWORD_HASH__: string;
-
 const AUTH_KEY = "miniyo_auth_user";
 const USERS_KEY = "miniyo_users";
-const ADMIN_EMAIL = "miniyo.store.lb@gmail.com";
-
-// Build-time hash from vite.config.ts define plugin
-const BUILD_TIME_ADMIN_HASH: string = typeof __ADMIN_PASSWORD_HASH__ !== "undefined" ? __ADMIN_PASSWORD_HASH__ : "";
 
 export interface LocalUser {
   id: number;
@@ -40,24 +33,7 @@ function storeUsers(users: LocalUser[]) {
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
 }
 
-function seedAdminUser() {
-  const users = getStoredUsers();
-  if (users.some((u) => u.email === ADMIN_EMAIL)) return;
-
-  users.push({
-    id: 1,
-    email: ADMIN_EMAIL,
-    name: "Omran",
-    phone: "+961 81 38 59 40",
-    role: "super_admin",
-    avatar: null,
-    passwordHash: BUILD_TIME_ADMIN_HASH || "__unset__",
-  });
-  storeUsers(users);
-}
-
 export function getCurrentUser(): Omit<LocalUser, "passwordHash"> | null {
-  seedAdminUser();
   try {
     const raw = localStorage.getItem(AUTH_KEY);
     if (!raw) return null;
@@ -80,19 +56,14 @@ export async function localLogin(
   email: string,
   password: string
 ): Promise<{ success: true; user: Omit<LocalUser, "passwordHash"> } | { success: false; error: string }> {
-  seedAdminUser();
-
   const users = getStoredUsers();
   const user = users.find((u) => u.email === email);
   if (!user) {
     return { success: false, error: "Invalid email or password" };
   }
 
-  if (user.passwordHash === "__unset__" || user.passwordHash === "") {
-    return {
-      success: false,
-      error: "Admin login is disabled. Set ADMIN_PASSWORD environment variable and redeploy.",
-    };
+  if (!user.passwordHash) {
+    return { success: false, error: "Invalid email or password" };
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
@@ -111,7 +82,6 @@ export async function localRegister(data: {
   name: string;
   phone?: string;
 }): Promise<{ success: true; user: Omit<LocalUser, "passwordHash"> } | { success: false; error: string }> {
-  seedAdminUser();
   const users = getStoredUsers();
 
   if (users.some((u) => u.email === data.email)) {

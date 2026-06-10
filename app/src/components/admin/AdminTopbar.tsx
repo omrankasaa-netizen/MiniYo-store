@@ -1,6 +1,7 @@
 import { Globe, Check, Bell, LogOut } from 'lucide-react'
 import { useAdminStore } from '@/stores/adminStore'
-import { useAuth } from '@/hooks/useAuth'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
+import { useNavigate } from 'react-router'
 
 interface Props {
   title: string
@@ -9,9 +10,15 @@ interface Props {
 
 export function AdminTopbar({ title, onMenuClick }: Props) {
   const { pendingChanges, publishedAt, publishChanges } = useAdminStore()
-  const { user, logout } = useAuth()
+  const { admin, logout } = useAdminAuth()
+  const navigate = useNavigate()
 
-  const initial = user?.name?.charAt(0).toUpperCase() || 'A'
+  const initial = admin?.email?.charAt(0).toUpperCase() || 'A'
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/admin/login')
+  }
 
   return (
     <header className="sticky top-0 z-30 bg-[#FAFAF7]/95 backdrop-blur-sm border-b border-[#E8E4DB] h-14 flex items-center px-4 lg:px-6 shrink-0">
@@ -48,18 +55,18 @@ export function AdminTopbar({ title, onMenuClick }: Props) {
         <div className="flex items-center gap-2 ml-1 pl-2 border-l border-[#E8E4DB]">
           <div
             className="w-8 h-8 rounded-full bg-[#2D5A4C] flex items-center justify-center text-white text-xs font-semibold"
-            title={user?.name || 'Admin'}
+            title={admin?.email || 'Admin'}
           >
             {initial}
           </div>
           <span className="hidden md:inline text-xs text-[#5C6B60] font-medium max-w-[100px] truncate">
-            {user?.name || 'Admin'}
+            {admin?.email || 'Admin'}
           </span>
         </div>
 
-        {/* Logout Button - NOW WITH TEXT */}
+        {/* Logout Button */}
         <button
-          onClick={logout}
+          onClick={handleLogout}
           className="ml-1 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-500 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors"
           title="Logout"
         >

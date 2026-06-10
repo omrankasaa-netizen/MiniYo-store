@@ -1,6 +1,6 @@
 import * as jose from "jose";
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 import * as schema from "@db/schema";
 import { getDb } from "./queries/connection";
 import { env } from "./lib/env";
@@ -89,4 +89,69 @@ export async function findOrCreateLocalUser(data: {
   }).$returningId();
 
   return db.select().from(schema.users).where(eq(schema.users.id, result.id)).limit(1).then(r => r[0]!);
+}
+
+// ── Admin User (DB-backed) ──
+
+export async function countAdminUsers(): Promise<number> {
+  const db = getDb();
+  const [row] = await db.select({ count: count() }).from(schema.adminUsers);
+  return row?.count ?? 0;
+}
+
+export async function findAdminUserByEmail(email: string) {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(schema.adminUsers)
+    .where(eq(schema.adminUsers.email, email))
+    .limit(1);
+  return rows.at(0);
+}
+
+export async function createAdminUser(email: string): Promise<schema.AdminUser> {
+  const db = getDb();
+  const [result] = await db
+    .insert(schema.adminUsers)
+    .values({ email, passwordHash: null, passwordSetAt: null })
+    .$returningId();
+  const rows = await db
+    .select()
+    .from(schema.adminUsers)
+    .where(eq(schema.adminUsers.id, result.id))
+    .limit(1);
+  return rows[0]!;
+}
+
+export async function setAdminPassword(email: string, password: string): Promise<void> {
+  const db = getDb();
+  const passwordHash = await hashPassword(password);
+  await db
+    .update(schema.adminUsers)
+    .set({ passwordHash, passwordSetAt: new Date() })
+    .where(eq(schema.adminUsers.email, email));
+}
+
+export async function signAdminSession(adminId: number, email: string): Promise<string> {
+  return new jose.SignJWT({ adminId, email, type: "admin" })
+    .setProtectedHeader({ alg: JWT_ALG })
+    .setIssuedAt()
+    .setExpirationTime("30d")
+    .sign(LOCAL_SESSION_SECRET());
+}
+
+export async function verifyAdminSession(token: string): Promise<{ adminId: number; email: string } | null> {
+  try {
+    const { payload } = await jose.jwtVerify(token, LOCAL_SESSION_SECRET(), {
+      algorithms: [JWT_ALG],
+      clockTolerance: 60,
+    });
+    if (!payload.adminId || !payload.email || payload.type !== "admin") return null;
+    return {
+      adminId: payload.adminId as number,
+      email: payload.email as string,
+    };
+  } catch {
+    return null;
+  }
 }

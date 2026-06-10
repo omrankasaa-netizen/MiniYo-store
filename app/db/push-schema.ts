@@ -9,6 +9,7 @@ async function pushSchema() {
 
   // Drop all existing tables in correct order (foreign keys)
   const dropTables = [
+    "DROP TABLE IF EXISTS admin_users",
     "DROP TABLE IF EXISTS membership_activities",
     "DROP TABLE IF EXISTS email_queue",
     "DROP TABLE IF EXISTS audit_logs",
@@ -385,6 +386,16 @@ async function pushSchema() {
       error TEXT,
       createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       sentAt TIMESTAMP
+    )`,
+
+    // Admin Users
+    `CREATE TABLE IF NOT EXISTS admin_users (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      email VARCHAR(320) NOT NULL UNIQUE,
+      passwordHash VARCHAR(255),
+      passwordSetAt TIMESTAMP NULL,
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )`,
 
     // Membership Activities

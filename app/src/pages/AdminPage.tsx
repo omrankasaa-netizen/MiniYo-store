@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router'
-import { useAuth } from '@/hooks/useAuth'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
 import { useAdminStore } from '@/stores/adminStore'
 import { AdminSidebar } from '@/components/admin/AdminSidebar'
 import { AdminTopbar } from '@/components/admin/AdminTopbar'
@@ -23,17 +23,22 @@ export type AdminView =
 
 export function AdminPage() {
   const navigate = useNavigate()
-  const { user, isAuthenticated, isAdmin, isStaff } = useAuth()
+  const { admin, isLoading, isAuthenticated, needsSetup, logout } = useAdminAuth()
   const importPending = useAdminStore(s => s.importPending)
   const [view, setView] = useState<AdminView>('dashboard')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [syncNotification, setSyncNotification] = useState<string | null>(null)
 
-  // Auto-import pending orders/stock from storefront on mount
+  // Redirect to appropriate page based on auth state
   useEffect(() => {
-    if (!isAdmin) {
-      navigate(isAuthenticated ? '/' : '/login')
+    if (isLoading) return
+    if (needsSetup) {
+      navigate('/admin/setup-password')
+      return
+    }
+    if (!isAuthenticated) {
+      navigate('/admin/login')
       return
     }
     // Try importing any pending storefront data
@@ -47,7 +52,7 @@ export function AdminPage() {
         : `Updated stock for ${result.stockProductsUpdated} product${result.stockProductsUpdated > 1 ? 's' : ''}`
       )
     }
-  }, [isAdmin, isAuthenticated, navigate, importPending])
+  }, [isLoading, isAuthenticated, needsSetup, navigate, importPending])
 
   // Also listen for storage events (other tabs)
   useEffect(() => {
@@ -63,7 +68,7 @@ export function AdminPage() {
     return () => window.removeEventListener('storage', handleStorage)
   }, [importPending])
 
-  if (!isAdmin) return null
+  if (isLoading || !isAuthenticated) return null
 
   const renderModule = () => {
     switch (view) {
