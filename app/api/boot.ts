@@ -7,6 +7,7 @@ import { createContext } from "./context";
 import { env } from "./lib/env";
 import { createOAuthCallbackHandler } from "./kimi/auth";
 import { Paths } from "@contracts/constants";
+import { handleAdminLogin } from "./admin-login-handler";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
@@ -44,6 +45,32 @@ app.use("/api/trpc/*", async (c) => {
     createContext,
   });
 });
+// Direct admin login endpoint — bypasses tRPC router
+app.post("/api/admin/login", async (c) => {
+  let body: { email?: string; password?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ success: false, error: "Invalid JSON body" }, 400);
+  }
+
+  const { email, password } = body;
+  if (typeof email !== "string" || typeof password !== "string") {
+    return c.json({ success: false, error: "Email and password are required" }, 400);
+  }
+
+  try {
+    const result = await handleAdminLogin(email, password, c.req.raw.headers, c.res.headers);
+    if (!result.success) {
+      return c.json({ success: false, error: result.error }, 401);
+    }
+    return c.json({ success: true, email: result.email });
+  } catch (err) {
+    console.error("[admin-login] Unexpected error:", err);
+    return c.json({ success: false, error: "Internal server error" }, 500);
+  }
+});
+
 app.all("/api/*", (c) => c.json({ error: "Not Found" }, 404));
 
 // Health check endpoint for deployment platforms
