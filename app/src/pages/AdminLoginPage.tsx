@@ -20,6 +20,12 @@ export function AdminLoginPage() {
       return
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email.trim())) {
+      setError('Please enter a valid email address')
+      return
+    }
+
     setIsLoading(true)
 
     try {
@@ -71,7 +77,7 @@ export function AdminLoginPage() {
                 Email address
               </label>
               <input
-                type="email"
+                type="text"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 className="w-full h-11 border border-[#D4CFC6] rounded-xl px-4 text-sm bg-white outline-none focus:border-[#8FAE7B] focus:ring-2 focus:ring-[#8FAE7B]/20 transition-all"
