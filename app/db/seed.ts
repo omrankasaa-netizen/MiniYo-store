@@ -229,11 +229,11 @@ async function seed() {
   // ── 5. Seed FAQ ──
   console.log("Seeding FAQ...");
   const faqData = [
-    { question: "What sizes do you offer?", questionAr: "ما هي المقاسات المتوفرة؟", answer: "We offer sizes from 0-3 months up to 4-5 years. Each product page shows the specific size range available.", answerAr: "نقدم مقاسات من 0-3 أشهر حتى 4-5 سنوات. تظهر صفحة كل منتج نطاق المقاسات المتاح.", category: "general" },
-    { question: "Do you ship all over Lebanon?", questionAr: "هل تشحنون لجميع أنحاء لبنان؟", answer: "Yes! We deliver to all regions in Lebanon. Delivery typically takes 1-3 business days depending on your location.", answerAr: "نعم! نوصل لجميع المناطق في لبنان. يستغرق التوصيل عادة 1-3 أيام عمل حسب موقعك.", category: "shipping" },
-    { question: "What payment methods do you accept?", questionAr: "ما هي طرق الدفع المقبولة؟", answer: "We accept Cash on Delivery (COD) and Whish money transfers. You can select your preferred method at checkout.", answerAr: "نقبل الدفع عند الاستلام وتحويلات Whish. يمكنك اختيار طريقتك المفضلة عند الدفع.", category: "payment" },
-    { question: "Can I return or exchange items?", questionAr: "هل يمكنني إرجاع أو استبدال المنتجات؟", answer: "Yes, unused items in original packaging can be returned or exchanged within 14 days of delivery.", answerAr: "نعم، يمكن إرجاع أو استبدال المنتجات غير المستخدمة في عبوتها الأصلية خلال 14 يوماً من التوصيل.", category: "returns" },
-    { question: "How do I track my order?", questionAr: "كيف أتتبع طلبي؟", answer: "You can track your order using your order number and phone number on our Track Order page.", answerAr: "يمكنك تتبع طلبك باستخدام رقم الطلب ورقم الهاتف في صفحة تتبع الطلب.", category: "shipping" },
+    { question: "What sizes do you offer?", questionAr: "ما هي المقاسات المتوفرة؟", answer: "We offer sizes from 0-3 months up to 4-5 years. Each product page shows the specific size details.", answerAr: "نحن نقدم مقاسات من 0-3 أشهر حتى 4-5 سنوات. تعرض كل صفحة منتج المواصفات المحددة." },
+    { question: "Do you ship all over Lebanon?", questionAr: "هل تشحنون لجميع أنحاء لبنان؟", answer: "Yes! We deliver to all regions in Lebanon. Delivery typically takes 1-2 business days.", answerAr: "نعم! نحن نوصل إلى جميع أنحاء لبنان. عادة ما يستغرق التسليم 1-2 يوم عمل." },
+    { question: "What payment methods do you accept?", questionAr: "ما هي طرق الدفع المقبولة؟", answer: "We accept Cash on Delivery (COD) and Whish money transfers. You can select your preferred method at checkout.", answerAr: "نحن نقبل الدفع عند الاستلام وتحويلات Whish. يمكنك اختيار طريقتك المفضلة عند الدفع." },
+    { question: "Can I return or exchange items?", questionAr: "هل يمكنني إرجاع أو استبدال المنتجات؟", answer: "Yes, unused items in original packaging can be returned within 7 days of purchase.", answerAr: "نعم، يمكن إرجاع المنتجات غير المستخدمة في العبوة الأصلية خلال 7 أيام من الشراء." },
+    { question: "How do I track my order?", questionAr: "كيف أتتبع طلبي؟", answer: "You can track your order using your order number and phone number on our Track Order page.", answerAr: "يمكنك تتبع طلبك باستخدام رقم طلبك ورقم هاتفك على صفحة تتبع الطلب الخاصة بنا." },
   ];
 
   for (const faq of faqData) {
@@ -272,6 +272,7 @@ async function seed() {
 
   await pool.end();
   console.log("\nSeed completed successfully!");
+  console.log("NOTE: Admin user provisioning is now handled separately via /api/setup-admin");
 }
 
 seed().catch((e) => {
