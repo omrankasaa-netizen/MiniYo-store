@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Eye, EyeOff, ShieldCheck } from 'lucide-react'
-import { adminSetupStatus, adminFirstLogin, adminLogin } from '@/lib/adminAuth'
+import { adminLogin } from '@/lib/adminAuth'
 
 export function AdminLoginPage() {
   const navigate = useNavigate()
@@ -20,27 +20,11 @@ export function AdminLoginPage() {
       return
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email.trim())) {
-      setError('Please enter a valid email address')
-      return
-    }
-
     setIsLoading(true)
 
     try {
-      // Check setup status first
-      const status = await adminSetupStatus()
-
-      if (status.needsSetup) {
-        // No admin exists yet — first-time login (no password required)
-        const result = await adminFirstLogin(email)
-        if (result.success && result.needsPasswordSetup) {
-          navigate('/admin/setup-password')
-        }
-      } else {
-        // Normal login with password
-        await adminLogin(email, password)
+      const result = await adminLogin(email, password)
+      if (result.success) {
         navigate('/admin')
       }
     } catch (err: any) {
@@ -98,7 +82,6 @@ export function AdminLoginPage() {
                   onChange={e => setPassword(e.target.value)}
                   className="w-full h-11 border border-[#D4CFC6] rounded-xl px-4 pr-10 text-sm bg-white outline-none focus:border-[#8FAE7B] focus:ring-2 focus:ring-[#8FAE7B]/20 transition-all"
                   placeholder="Enter your password"
-                  autoComplete="current-password"
                 />
                 <button
                   type="button"
