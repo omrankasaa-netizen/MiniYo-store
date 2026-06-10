@@ -55,19 +55,19 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
   const [giftNote, setGiftNote] = useState('')
   const [selectedAddressId, setSelectedAddressId] = useState('')
 
-  // Pre-fill form from member profile / saved address
-  const defaultAddress = addresses.find(a => a.isDefault) || addresses[0]
+  // Pre-fill form from member profile / saved address (authenticated users only)
+  const defaultAddress = customer ? (addresses.find(a => a.isDefault) || addresses[0]) : undefined
   const [form, setForm] = useState({
     email: customer?.email || '',
-    phone: customer?.phone || defaultAddress?.phone || '',
-    fullName: customer?.name || defaultAddress?.fullName || '',
-    city: defaultAddress?.city || '',
-    district: defaultAddress?.district || '',
-    street: defaultAddress?.street || '',
-    building: defaultAddress?.building || '',
-    floor: defaultAddress?.floor || '',
-    apartment: defaultAddress?.apartment || '',
-    landmark: defaultAddress?.landmark || '',
+    phone: customer ? (customer.phone || defaultAddress?.phone || '') : '',
+    fullName: customer ? (customer.name || defaultAddress?.fullName || '') : '',
+    city: customer ? (defaultAddress?.city || '') : '',
+    district: customer ? (defaultAddress?.district || '') : '',
+    street: customer ? (defaultAddress?.street || '') : '',
+    building: customer ? (defaultAddress?.building || '') : '',
+    floor: customer ? (defaultAddress?.floor || '') : '',
+    apartment: customer ? (defaultAddress?.apartment || '') : '',
+    landmark: customer ? (defaultAddress?.landmark || '') : '',
     notes: '',
     whatsappUpdates: false,
   })
