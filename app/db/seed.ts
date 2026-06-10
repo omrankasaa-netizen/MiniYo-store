@@ -2,36 +2,16 @@ import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import { eq } from "drizzle-orm";
 import * as schema from "./schema";
-import { hashPassword } from "../api/local-auth";
 import "dotenv/config";
 
 const DATABASE_URL = process.env.DATABASE_URL!;
-const ADMIN_EMAIL = "admin@miniyo.store";
-const ADMIN_PASSWORD = "Admin@12345";
 
 async function seed() {
   console.log("Connecting to database...");
   const pool = mysql.createPool(DATABASE_URL);
   const db = drizzle(pool, { schema, mode: "planetscale" });
 
-  // ── 1. Seed Admin User ──
-  console.log("Seeding admin user...");
-  const existingAdmin = await db.select().from(schema.adminUsers)
-    .where(eq(schema.adminUsers.email, ADMIN_EMAIL))
-    .limit(1);
-
-  if (existingAdmin.length === 0) {
-    await db.insert(schema.adminUsers).values({
-      email: ADMIN_EMAIL,
-      passwordHash: await hashPassword(ADMIN_PASSWORD),
-      passwordSetAt: new Date(),
-    });
-    console.log(`Admin user created: ${ADMIN_EMAIL}`);
-  } else {
-    console.log(`Admin user already exists: ${ADMIN_EMAIL}`);
-  }
-
-  // ── 2. Seed Categories ──
+  // ── 1. Seed Categories ──
   console.log("Seeding categories...");
   const categoryData = [
     { slug: "bodysuits-rompers", name: "Bodysuits & Rompers", nameAr: "بدلات وأفرولات", sortOrder: 1 },
