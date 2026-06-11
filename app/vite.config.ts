@@ -12,7 +12,7 @@ export default defineConfig({
   // Explicit root ensures Vite resolves from project dir regardless of cwd
   root: __dirname,
   plugins: [
-    devServer({ entry: "api/boot.ts", exclude: [/^\\/(?!api\\/).*$/] }),
+    devServer({ entry: "api/boot.ts", exclude: [/^\/(?!api\/).*$/] }),
     inspectAttr(), react()
   ],
   server: {
