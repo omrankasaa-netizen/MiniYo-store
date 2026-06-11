@@ -3,7 +3,8 @@ import type { Locale } from '@/types'
 
 interface AuthStore {
   user: { id: number; email: string | null; name: string | null; role: string } | null
-  isAuthenticated: boolean
+  // isAuthenticated is derived — not stored — to prevent spoofing
+  readonly isAuthenticated: boolean
   isAdmin: boolean
   isLoading: boolean
   locale: Locale
@@ -14,17 +15,20 @@ interface AuthStore {
   logout: () => void
 }
 
-export const useAuthStore = create<AuthStore>((set) => ({
+export const useAuthStore = create<AuthStore>((set, get) => ({
   user: null,
-  isAuthenticated: false,
   isAdmin: false,
   isLoading: true,
   locale: (localStorage.getItem('locale') as Locale) || 'en',
 
+  // SECURITY: Derived getter — cannot be forged via DevTools
+  get isAuthenticated() {
+    return get().user !== null
+  },
+
   setUser: (user) => {
     set({
       user,
-      isAuthenticated: !!user,
       isAdmin: user ? ['admin', 'super_admin', 'staff'].includes(user.role) : false,
       isLoading: false,
     })
@@ -33,7 +37,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   setLoading: (loading) => set({ isLoading: loading }),
 
   logout: () => {
-    set({ user: null, isAuthenticated: false, isAdmin: false })
+    set({ user: null, isAdmin: false })
   },
 
   setLocale: (locale) => {
