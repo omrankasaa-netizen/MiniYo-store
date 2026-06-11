@@ -25,8 +25,14 @@ export default defineConfig({
   // Explicit root ensures Vite resolves from project dir regardless of cwd
   root: __dirname,
   plugins: [
-    devServer({ entry: "api/boot.ts", exclude: [/^\/(?!api\/).*$/] }),
-    inspectAttr(), react()
+    devServer({
+      entry: "api/boot.ts",
+      // Exclude all non-API routes from the Hono dev server so Vite handles them.
+      // Written as a function to avoid regex lookahead syntax that esbuild cannot parse.
+      exclude: [(path: string) => !path.startsWith("/api")],
+    }),
+    inspectAttr(),
+    react(),
   ],
   server: {
     port: 3000,
