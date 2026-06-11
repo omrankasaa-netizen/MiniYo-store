@@ -361,6 +361,8 @@ export const useMemberStore = create<MemberStore>()(
       },
 
       logout: () => {
+        // Clear localStorage to prevent rehydration of old data
+        localStorage.removeItem('miniyo-member')
         set({
           isAuthenticated: false,
           customer: null,
