@@ -60,8 +60,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 // FIX: AdminRoute — requires both isAuthenticated and a known admin email.
-// Update the ADMIN_EMAILS list to match your actual admin account(s).
-const ADMIN_EMAILS = ['admin@miniyo.com', 'omran@miniyo.com']
+const ADMIN_EMAILS = ['admin@miniyo.store']
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, customer } = useMemberStore(s => ({
     isAuthenticated: s.isAuthenticated,
