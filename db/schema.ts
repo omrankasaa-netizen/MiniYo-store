@@ -32,6 +32,21 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+// ── Admin Users (back-office access) ──
+export const adminUsers = mysqlTable("admin_users", {
+  id: serial("id").primaryKey(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  name: varchar("name", { length: 255 }),
+  passwordHash: varchar("passwordHash", { length: 255 }),
+  passwordSetAt: timestamp("passwordSetAt"),
+  // super_admin = full access, admin = no delete/settings, staff = orders + product stock only
+  role: mysqlEnum("role", ["super_admin", "admin", "staff"]).default("super_admin").notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AdminUser = typeof adminUsers.$inferSelect;
+
 // ── Categories ──
 export const categories = mysqlTable("categories", {
   id: serial("id").primaryKey(),
