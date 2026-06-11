@@ -40,9 +40,10 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
   const { items, subtotal, checkout } = useCartStore()
   const memberStore = useMemberStore()
   const discountStore = useDiscountStore()
-  const customer = memberStore.customer
-  const addresses = memberStore.addresses
-  const paymentMethods = memberStore.paymentMethods
+  const isAuthenticated = memberStore.isAuthenticated
+  const customer = isAuthenticated ? memberStore.customer : null
+  const addresses = isAuthenticated ? memberStore.addresses : []
+  const paymentMethods = isAuthenticated ? memberStore.paymentMethods : []
   const adminSettings = getAdminSettings()
 
   const [summaryOpen, setSummaryOpen] = useState(false)
@@ -55,7 +56,6 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
   const [giftNote, setGiftNote] = useState('')
   const [selectedAddressId, setSelectedAddressId] = useState('')
 
-  // Pre-fill form from member profile / saved address
   const defaultAddress = addresses.find(a => a.isDefault) || addresses[0]
   const [form, setForm] = useState({
     email: customer?.email || '',
@@ -72,18 +72,20 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
     whatsappUpdates: false,
   })
 
-  // Calculate member discount + promo code
-  const memberDiscount = customer ? memberStore.calculateDiscount(subtotal) : { discount: 0, reason: '' }
+  const memberDiscount = isAuthenticated && customer
+    ? memberStore.calculateDiscount(subtotal)
+    : { discount: 0, reason: '' }
   const promoDiscount = promoCode ? discountStore.calculateDiscount(promoCode, subtotal) : { discount: 0, reason: '' }
   const autoDiscount = discountStore.applyAutoDiscounts(subtotal)
   const activeDiscount = promoDiscount.discount > 0 ? promoDiscount : (memberDiscount.discount > 0 ? memberDiscount : autoDiscount)
   const discount = activeDiscount.discount
   const discountReason = activeDiscount.reason
 
-  // Calculate shipping with member perks
   const qualifiesForFree = subtotal >= (adminSettings.freeShippingThreshold || 50)
   const zoneFee = SHIPPING_ZONES.find(z => z.key === zone)?.fee || 0
-  const memberShipping = customer && subtotal < 50 ? memberStore.calculateShipping(subtotal) : { fee: null, reason: '' }
+  const memberShipping = isAuthenticated && customer && subtotal < 50
+    ? memberStore.calculateShipping(subtotal)
+    : { fee: null, reason: '' }
   const deliveryFee = qualifiesForFree ? 0 : (memberShipping.fee !== null ? memberShipping.fee : zoneFee)
 
   const total = subtotal + deliveryFee - discount
@@ -91,7 +93,6 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
   const codEnabled = adminSettings.codEnabled !== false
   const wishEnabled = adminSettings.wishEnabled !== false
 
-  // Auto-select payment method from saved preferences
   useEffect(() => {
     const defaultPm = paymentMethods.find(p => p.isDefault)
     if (defaultPm) {
@@ -99,7 +100,6 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
     }
   }, [paymentMethods])
 
-  // Apply saved address selection
   const handleAddressSelect = (addrId: string) => {
     setSelectedAddressId(addrId)
     const addr = addresses.find(a => a.id === addrId)
@@ -136,8 +136,7 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
     if (!result) return
     const { orderNumber } = result
 
-    // Record in member store if logged in
-    if (customer) {
+    if (isAuthenticated && customer) {
       memberStore.recordOrder({
         subtotal,
         discount,
@@ -147,7 +146,6 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
       })
     }
 
-    // Build complete order with all checkout data
     const shippingNotes = [
       form.notes,
       isGift ? `GIFT: ${giftNote || 'Free gift wrapping requested'}` : null,
@@ -224,7 +222,6 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
         <span className="flex items-center gap-1 text-green-600 text-sm"><Lock size={14} /> Secure</span>
       </div>
 
-      {/* Membership Banner */}
       {customer && (
         <div className={`rounded-xl p-4 mb-6 flex items-center gap-3 border`} style={{ backgroundColor: `${tierColor}08`, borderColor: `${tierColor}25` }}>
           <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: `${tierColor}15` }}>
@@ -246,8 +243,6 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-8">
-
-        {/* Order Summary (Mobile) */}
         <div className="lg:hidden">
           <button type="button" onClick={() => setSummaryOpen(!summaryOpen)}
             className="flex items-center justify-between w-full py-3 border-b border-border-beige">
@@ -277,7 +272,6 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
           )}
         </div>
 
-        {/* Contact Info */}
         <div>
           <h3 className="font-accent font-semibold text-dark-teal mb-4">1. Contact Information</h3>
           <div className="space-y-3">
@@ -295,7 +289,6 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
           )}
         </div>
 
-        {/* Saved Addresses */}
         {addresses.length > 0 && (
           <div>
             <h3 className="font-accent font-semibold text-dark-teal mb-3">1b. Saved Address</h3>
@@ -315,7 +308,6 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
           </div>
         )}
 
-        {/* Shipping Address */}
         <div>
           <h3 className="font-accent font-semibold text-dark-teal mb-4">2. Shipping Address</h3>
           <div className="space-y-3">
@@ -335,7 +327,6 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
           </div>
         </div>
 
-        {/* Delivery Method */}
         <div>
           <h3 className="font-accent font-semibold text-dark-teal mb-4">3. Delivery Method</h3>
           <div className="bg-cream rounded-xl p-4 mb-3 flex items-center gap-3">
@@ -380,7 +371,6 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
           </div>
         </div>
 
-        {/* Gift Options */}
         <div>
           <h3 className="font-accent font-semibold text-dark-teal mb-4">4. Gift Options</h3>
           <label className={`flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer transition-colors mb-3 ${isGift ? 'border-beige bg-[#FFF8F9]' : 'border-border-beige hover:bg-cream'}`}>
@@ -405,7 +395,6 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
           )}
         </div>
 
-        {/* Payment Method */}
         <div>
           <h3 className="font-accent font-semibold text-dark-teal mb-4">5. Payment Method</h3>
           <div className="space-y-2">
@@ -433,7 +422,6 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
           </div>
         </div>
 
-        {/* Promo Code */}
         <div>
           <h3 className="font-accent font-semibold text-dark-teal mb-3">Promo Code</h3>
           <div className="flex gap-2">
@@ -473,7 +461,6 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
           )}
         </div>
 
-        {/* Order Total */}
         <div className="bg-cream rounded-xl p-5 space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-muted-teal">Subtotal</span>
@@ -504,7 +491,6 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
           {mutePrice && <p className="text-xs text-sage-green">Prices hidden on packing slip</p>}
         </div>
 
-        {/* Submit */}
         <div>
           <button type="submit"
             disabled={items.length === 0 || (!codEnabled && !wishEnabled)}
