@@ -5,7 +5,7 @@ import * as schema from "../app/db/schema";
 import "dotenv/config";
 
 const ADMIN_EMAIL = "admin@miniyo.store";
-const ADMIN_PASSWORD = "Admin@12345";
+const ADMIN_PASSWORD = "MiniYo#3477";
 const BCRYPT_ROUNDS = 12;
 
 async function setupAdminBootstrap() {
