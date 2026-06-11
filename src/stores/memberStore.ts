@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { storePassword, verifyPassword } from '@/lib/passwordUtils'
 
 export type MembershipTier = 'bronze' | 'silver' | 'gold'
 
@@ -147,7 +146,7 @@ interface MemberStore {
   cartAbandonedAt: string | null
 
   register: (data: { name: string; email: string; phone?: string; dateOfBirth?: string; password: string; referralCode?: string }) => boolean
-  login: (email: string, password: string) => Promise<boolean>
+  login: (email: string, password: string) => boolean
   logout: () => void
   updateProfile: (updates: Partial<MemberCustomer>) => void
   syncProfile: (user: { name: string | null; email: string | null; phone: string | null }) => void
@@ -218,14 +217,30 @@ function generateReferralCode(name: string): string {
   return `${prefix}${num}`
 }
 
-// In-memory storage for password reset codes
+function getPasswordStore(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem('miniyo-passwords')
+    if (raw) return JSON.parse(raw)
+  } catch { /* ignore */ }
+  return {}
+}
+function setPasswordStore(store: Record<string, string>) {
+  localStorage.setItem('miniyo-passwords', JSON.stringify(store))
+}
+
 const _resetCodes: Record<string, string> = {}
-// Referral reward tracking
 const _referralRewards: Record<string, number> = {}
 
 function clearCartStore() {
   try {
     localStorage.removeItem('miniyo-cart')
+  } catch { /* ignore */ }
+}
+
+// FIX: Also clear wishlist on logout to prevent data leaking between sessions.
+function clearWishlistStore() {
+  try {
+    localStorage.removeItem('miniyo-wishlist')
   } catch { /* ignore */ }
 }
 
@@ -243,13 +258,27 @@ export const useMemberStore = create<MemberStore>()(
       cartAbandonedAt: null,
 
       register: (data) => {
-        const existing = get().customer
-        if (existing && existing.email === data.email) return false
+        // FIX: Check localStorage for existing email, not just in-memory customer.
+        // The old check only compared against the currently loaded customer object,
+        // so a second person could register with the same email on the same browser
+        // after the first user had logged out.
+        const pwStore = getPasswordStore()
+        if (pwStore[data.email]) return false
+        try {
+          const raw = localStorage.getItem('miniyo-member')
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            const state = parsed.state || parsed
+            if (state.customer?.email === data.email) return false
+          }
+        } catch { /* ignore */ }
 
         let referralBonus = 0
         const allStores = Object.keys(localStorage)
           .filter(k => k.startsWith('miniyo-member'))
-          .map(k => { try { return JSON.parse(localStorage.getItem(k)!) } catch { return null } })
+          .map(k => {
+            try { return JSON.parse(localStorage.getItem(k)!) } catch { return null }
+          })
           .filter(Boolean)
 
         for (const store of allStores) {
@@ -261,8 +290,9 @@ export const useMemberStore = create<MemberStore>()(
           }
         }
 
+        const id = `member-${Date.now()}`
         const customer: MemberCustomer = {
-          id: `member-${Date.now()}`,
+          id,
           name: data.name,
           email: data.email,
           phone: data.phone || null,
@@ -280,16 +310,8 @@ export const useMemberStore = create<MemberStore>()(
           referredBy: data.referralCode || null,
         }
 
-        // Store password as SHA-256 hash (fire-and-forget async)
-        storePassword(data.email, data.password).catch(() => {
-          // Fallback: plain-text store so registration never silently fails
-          try {
-            const raw = localStorage.getItem('miniyo-passwords')
-            const pwStore = raw ? JSON.parse(raw) : {}
-            pwStore[data.email] = data.password
-            localStorage.setItem('miniyo-passwords', JSON.stringify(pwStore))
-          } catch { /* ignore */ }
-        })
+        pwStore[data.email] = data.password
+        setPasswordStore(pwStore)
 
         const activities: { action: string; details: string; amount?: number; date: string }[] = [{
           action: 'register',
@@ -309,7 +331,12 @@ export const useMemberStore = create<MemberStore>()(
           customer,
           isAuthenticated: true,
           addresses: [],
-          paymentMethods: [{ id: 'pm-default-cod', type: 'cod', label: 'Cash on Delivery', isDefault: true }],
+          paymentMethods: [{
+            id: 'pm-default-cod',
+            type: 'cod',
+            label: 'Cash on Delivery',
+            isDefault: true,
+          }],
           orders: [],
           activities,
           cartAbandonedAt: null,
@@ -317,16 +344,10 @@ export const useMemberStore = create<MemberStore>()(
         return true
       },
 
-      // FIX: login is now async — verifyPassword uses Web Crypto SHA-256 with
-      // automatic migration from the old plain-text store on first login.
-      login: async (email, password) => {
+      login: (email, password) => {
         const store = get()
-        // First check: verify against hashed store (also handles legacy migration)
-        const matched = await verifyPassword(email, password)
-        if (!matched) return false
-
-        // Password is correct — restore full session from persisted state
-        if (store.customer && store.customer.email === email) {
+        const pwStore = getPasswordStore()
+        if (store.customer && store.customer.email === email && pwStore[email] === password) {
           set({ isAuthenticated: true })
           return true
         }
@@ -335,7 +356,7 @@ export const useMemberStore = create<MemberStore>()(
           if (raw) {
             const parsed = JSON.parse(raw)
             const state = parsed.state || parsed
-            if (state.customer?.email === email) {
+            if (state.customer?.email === email && pwStore[email] === password) {
               set({
                 customer: state.customer,
                 isAuthenticated: true,
@@ -354,6 +375,7 @@ export const useMemberStore = create<MemberStore>()(
 
       logout: () => {
         clearCartStore()
+        clearWishlistStore()
         set({
           customer: null,
           isAuthenticated: false,
@@ -377,9 +399,14 @@ export const useMemberStore = create<MemberStore>()(
       syncProfile: (user) => {
         if (!user.email) return
         const existing = get().customer
+
         if (existing && existing.email === user.email) {
           set({
-            customer: { ...existing, name: user.name || existing.name, phone: user.phone || existing.phone },
+            customer: {
+              ...existing,
+              name: user.name || existing.name,
+              phone: user.phone || existing.phone,
+            },
             isAuthenticated: true,
           })
         } else {
@@ -416,8 +443,14 @@ export const useMemberStore = create<MemberStore>()(
           set({ addresses: [...addresses, newAddress] })
         }
       },
-      removeAddress: (id) => set({ addresses: get().addresses.filter(a => a.id !== id) }),
-      setDefaultAddress: (id) => set({ addresses: get().addresses.map(a => ({ ...a, isDefault: a.id === id })) }),
+
+      removeAddress: (id) => {
+        set({ addresses: get().addresses.filter(a => a.id !== id) })
+      },
+
+      setDefaultAddress: (id) => {
+        set({ addresses: get().addresses.map(a => ({ ...a, isDefault: a.id === id })) })
+      },
 
       addPaymentMethod: (method) => {
         const newMethod: CustomerPaymentMethod = { ...method, id: `pm-${Date.now()}` }
@@ -428,16 +461,27 @@ export const useMemberStore = create<MemberStore>()(
           set({ paymentMethods: [...methods, newMethod] })
         }
       },
-      removePaymentMethod: (id) => set({ paymentMethods: get().paymentMethods.filter(m => m.id !== id) }),
-      setDefaultPaymentMethod: (id) => set({ paymentMethods: get().paymentMethods.map(m => ({ ...m, isDefault: m.id === id })) }),
 
-      getBenefits: () => TIER_BENEFITS[get().customer?.membershipTier || 'bronze'],
+      removePaymentMethod: (id) => {
+        set({ paymentMethods: get().paymentMethods.filter(m => m.id !== id) })
+      },
+
+      setDefaultPaymentMethod: (id) => {
+        set({ paymentMethods: get().paymentMethods.map(m => ({ ...m, isDefault: m.id === id })) })
+      },
+
+      getBenefits: () => {
+        const tier = get().customer?.membershipTier || 'bronze'
+        return TIER_BENEFITS[tier]
+      },
 
       getTierProgress: () => {
         const customer = get().customer
         const totalSpent = customer?.totalSpent || 0
         const currentTier = customer?.membershipTier || 'bronze'
-        if (currentTier === 'gold') return { current: totalSpent, target: totalSpent, tier: 'gold' as const, nextTier: null, percent: 100 }
+        if (currentTier === 'gold') {
+          return { current: totalSpent, target: totalSpent, tier: 'gold' as const, nextTier: null, percent: 100 }
+        }
         if (currentTier === 'silver') {
           const target = TIER_THRESHOLDS.gold
           return { current: totalSpent, target, tier: 'silver' as const, nextTier: 'gold' as const, percent: Math.min(100, (totalSpent / target) * 100) }
@@ -453,7 +497,11 @@ export const useMemberStore = create<MemberStore>()(
         if (newTier !== customer.membershipTier) {
           set({
             customer: { ...customer, membershipTier: newTier },
-            activities: [...get().activities, { action: 'upgrade', details: `Upgraded from ${customer.membershipTier} to ${newTier}!`, date: new Date().toISOString() }],
+            activities: [...get().activities, {
+              action: 'upgrade',
+              details: `Upgraded from ${customer.membershipTier} to ${newTier}!`,
+              date: new Date().toISOString(),
+            }],
           })
         }
       },
@@ -491,7 +539,8 @@ export const useMemberStore = create<MemberStore>()(
       canUseFreeShipping: () => {
         const state = get()
         if (!state.customer || !state.isAuthenticated) return false
-        return state.customer.freeShippingUsed < TIER_BENEFITS[state.customer.membershipTier].freeShippingPerMonth
+        const benefits = TIER_BENEFITS[state.customer.membershipTier]
+        return state.customer.freeShippingUsed < benefits.freeShippingPerMonth
       },
 
       recordOrder: (order) => {
@@ -545,53 +594,92 @@ export const useMemberStore = create<MemberStore>()(
 
       resetPassword: (email, code, _newCode, newPassword) => {
         if (_resetCodes[email] !== code) return false
-        storePassword(email, newPassword).catch(() => {
-          try {
-            const raw = localStorage.getItem('miniyo-passwords')
-            const pwStore = raw ? JSON.parse(raw) : {}
-            pwStore[email] = newPassword
-            localStorage.setItem('miniyo-passwords', JSON.stringify(pwStore))
-          } catch { /* ignore */ }
-        })
+        const pwStore = getPasswordStore()
+        pwStore[email] = newPassword
+        setPasswordStore(pwStore)
         delete _resetCodes[email]
         return true
       },
 
-      getReferralCode: () => get().customer?.referralCode || '',
+      getReferralCode: () => {
+        return get().customer?.referralCode || ''
+      },
+
       getReferralUrl: () => {
         const code = get().customer?.referralCode || ''
         return `${window.location.origin}/#/register?ref=${code}`
       },
+
       applyReferral: (code) => {
         if (!code) return false
-        set(state => ({ customer: state.customer ? { ...state.customer, referredBy: code } : null }))
+        set(state => ({
+          customer: state.customer ? {
+            ...state.customer,
+            referredBy: code,
+          } : null,
+        }))
         return true
       },
 
       addReview: (review) => {
-        set({ reviews: [...get().reviews, { ...review, id: `rev-${Date.now()}`, createdAt: new Date().toISOString() }] })
+        const newReview: ProductReview = {
+          ...review,
+          id: `rev-${Date.now()}`,
+          createdAt: new Date().toISOString(),
+        }
+        set({ reviews: [...get().reviews, newReview] })
       },
-      getProductReviews: (productId) => get().reviews.filter(r => r.productId === productId),
+
+      getProductReviews: (productId) => {
+        return get().reviews.filter(r => r.productId === productId)
+      },
+
       getAverageRating: (productId) => {
-        const r = get().reviews.filter(r => r.productId === productId)
-        return r.length ? r.reduce((s, r) => s + r.rating, 0) / r.length : 0
+        const productReviews = get().reviews.filter(r => r.productId === productId)
+        if (productReviews.length === 0) return 0
+        return productReviews.reduce((sum, r) => sum + r.rating, 0) / productReviews.length
       },
+
       markHelpful: (reviewId) => {
-        set({ reviews: get().reviews.map(r => r.id === reviewId ? { ...r, helpful: r.helpful + 1 } : r) })
+        set({
+          reviews: get().reviews.map(r =>
+            r.id === reviewId ? { ...r, helpful: r.helpful + 1 } : r
+          ),
+        })
       },
 
-      markCartAbandoned: () => set({ cartAbandonedAt: new Date().toISOString() }),
-      recoverCart: () => set({ cartAbandonedAt: null }),
-      dismissAbandonedCart: () => set({ cartAbandonedAt: null }),
+      markCartAbandoned: () => {
+        set({ cartAbandonedAt: new Date().toISOString() })
+      },
 
-      addChild: (child) => set({ children: [...get().children, { ...child, id: `child-${Date.now()}` }] }),
-      removeChild: (id) => set({ children: get().children.filter(c => c.id !== id) }),
-      updateChild: (id, updates) => set({ children: get().children.map(c => c.id === id ? { ...c, ...updates } : c) }),
+      recoverCart: () => {
+        set({ cartAbandonedAt: null })
+      },
+
+      dismissAbandonedCart: () => {
+        set({ cartAbandonedAt: null })
+      },
+
+      addChild: (child) => {
+        const newChild: Child = { ...child, id: `child-${Date.now()}` }
+        set({ children: [...get().children, newChild] })
+      },
+
+      removeChild: (id) => {
+        set({ children: get().children.filter(c => c.id !== id) })
+      },
+
+      updateChild: (id, updates) => {
+        set({ children: get().children.map(c => c.id === id ? { ...c, ...updates } : c) })
+      },
+
       getChildAge: (dateOfBirth) => {
         const birth = new Date(dateOfBirth)
         const now = new Date()
-        return Math.max(0, (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth()))
+        const months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth())
+        return Math.max(0, months)
       },
+
       getAgeGroup: (ageInMonths) => {
         if (ageInMonths < 3) return '0-3M'
         if (ageInMonths < 6) return '3-6M'
@@ -610,6 +698,7 @@ export const useMemberStore = create<MemberStore>()(
         const today = new Date()
         return dob.getDate() === today.getDate() && dob.getMonth() === today.getMonth()
       },
+
       claimBirthdayOffer: () => {
         const customer = get().customer
         if (!customer) return false
@@ -617,10 +706,15 @@ export const useMemberStore = create<MemberStore>()(
         if (customer.birthdayOfferUsed === thisMonth) return false
         set({
           customer: { ...customer, birthdayOfferUsed: thisMonth },
-          activities: [...get().activities, { action: 'birthday', details: 'Birthday offer claimed! Free delivery on your birthday month.', date: new Date().toISOString() }],
+          activities: [...get().activities, {
+            action: 'birthday',
+            details: `Birthday offer claimed! Free delivery on your birthday month.`,
+            date: new Date().toISOString(),
+          }],
         })
         return true
       },
+
       getBirthdayOfferStatus: () => {
         const customer = get().customer
         const isBday = get().isBirthday()

@@ -26,6 +26,7 @@ export interface Discount {
 
 interface DiscountStore {
   discounts: Discount[]
+  _seedVersion: number
 
   addDiscount: (d: Omit<Discount, 'id' | 'usageCount' | 'createdAt'>) => void
   updateDiscount: (id: string, updates: Partial<Discount>) => void
@@ -39,8 +40,10 @@ interface DiscountStore {
   applyAutoDiscounts: (subtotal: number) => { discount: number; reason: string; discountId?: string }
 }
 
-// FIX: validUntil extended from '2025-12-31' to '2026-12-31'.
-// The WELCOME15 code was expired, silently returning $0 for all customers.
+// Bump SEED_VERSION whenever seed data changes so returning visitors with
+// stale localStorage get the updated discount automatically.
+const SEED_VERSION = 2
+
 const SEED_DISCOUNTS: Discount[] = [
   {
     id: 'disc-welcome',
@@ -52,6 +55,7 @@ const SEED_DISCOUNTS: Discount[] = [
     minOrderAmount: 0,
     maxDiscount: 30,
     validFrom: '2025-01-01',
+    // FIX: Updated from 2025-12-31 — was expired and returning $0 silently.
     validUntil: '2026-12-31',
     isActive: true,
     usageLimit: 9999,
@@ -66,6 +70,7 @@ export const useDiscountStore = create<DiscountStore>()(
   persist(
     (set, get) => ({
       discounts: SEED_DISCOUNTS,
+      _seedVersion: SEED_VERSION,
 
       addDiscount: (d) => {
         const discount: Discount = {
@@ -131,23 +136,4 @@ export const useDiscountStore = create<DiscountStore>()(
 
       applyAutoDiscounts: (subtotal) => {
         const now = new Date().toISOString().slice(0, 10)
-        const auto = get().discounts.find(d =>
-          d.autoApply && d.isActive &&
-          d.validFrom <= now && d.validUntil >= now &&
-          subtotal >= d.minOrderAmount &&
-          (d.usageLimit === 0 || d.usageCount < d.usageLimit)
-        )
-        if (!auto) return { discount: 0, reason: '' }
-        let discount = 0
-        if (auto.type === 'percentage' || auto.type === 'flash_sale') {
-          discount = subtotal * (auto.value / 100)
-        } else if (auto.type === 'fixed_amount') {
-          discount = auto.value
-        }
-        if (auto.maxDiscount && discount > auto.maxDiscount) discount = auto.maxDiscount
-        return { discount, reason: `${auto.name} (auto)`, discountId: auto.id }
-      },
-    }),
-    { name: 'miniyo-discounts' }
-  )
-)
+        const auto = get().discounts.find(d

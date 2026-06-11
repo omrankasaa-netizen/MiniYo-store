@@ -7,6 +7,9 @@ interface WishlistStore {
   remove: (productId: string) => void
   toggle: (productId: string) => void
   isInWishlist: (productId: string) => boolean
+  // FIX: Added clearWishlist so logout can wipe the wishlist and prevent
+  // a previous customer's saved items from being visible to the next session.
+  clearWishlist: () => void
 }
 
 export const useWishlistStore = create<WishlistStore>()(
@@ -33,6 +36,11 @@ export const useWishlistStore = create<WishlistStore>()(
       },
 
       isInWishlist: (productId) => get().items.includes(productId),
+
+      clearWishlist: () => {
+        set({ items: [] })
+        localStorage.removeItem('miniyo-wishlist')
+      },
     }),
     {
       name: 'miniyo-wishlist',
