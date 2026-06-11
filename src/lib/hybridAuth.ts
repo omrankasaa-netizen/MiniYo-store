@@ -5,8 +5,9 @@
  * No plaintext password exists in source code or bundle.
  *
  * Customer passwords are bcrypt-hashed (cost 12) and stored in
- * localStorage under the key 'miniyo_users'. The plaintext miniyo-passwords
- * key has been retired — all password operations route through this module.
+ * localStorage under the key 'miniyo_users'. The legacy 'miniyo-passwords'
+ * key (plaintext) is no longer written — all password operations route
+ * through this module.
  */
 
 import bcrypt from 'bcryptjs'
@@ -16,6 +17,8 @@ declare const __ADMIN_PASSWORD_HASH__: string
 
 const AUTH_KEY = 'miniyo_auth_user'
 const USERS_KEY = 'miniyo_users'
+
+/** Single source of truth for the admin email — imported by App.tsx and memberStore */
 export const ADMIN_EMAIL = 'miniyo.store.lb@gmail.com'
 
 // Build-time hash from vite.config.ts define plugin
@@ -146,8 +149,8 @@ export async function localLogout() {
 }
 
 /**
- * Update a user's password with a new bcrypt hash.
- * Used by memberStore.resetPassword().
+ * Update a user's password — bcrypt-hashes the new value (cost 12)
+ * and persists it to miniyo_users. Used by memberStore.resetPassword().
  */
 export async function updateUserPassword(email: string, newPassword: string): Promise<boolean> {
   const users = getStoredUsers()

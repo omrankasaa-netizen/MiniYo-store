@@ -151,6 +151,7 @@ interface MemberStore {
   reviews: ProductReview[]
   cartAbandonedAt: string | null
 
+  // Async — now route through hybridAuth bcrypt system
   register: (data: { name: string; email: string; phone?: string; dateOfBirth?: string; password: string; referralCode?: string }) => Promise<boolean>
   login: (email: string, password: string) => Promise<boolean>
   logout: () => void
@@ -223,6 +224,7 @@ function generateReferralCode(name: string): string {
   return `${prefix}${num}`
 }
 
+// In-memory reset code store (never persisted)
 const _resetCodes: Record<string, string> = {}
 
 function clearCartStore() {
@@ -246,8 +248,7 @@ export const useMemberStore = create<MemberStore>()(
       reviews: [],
       cartAbandonedAt: null,
 
-      // Routes through hybridAuth.localRegister — passwords are bcrypt-hashed.
-      // The old plaintext miniyo-passwords key is no longer used.
+      // Passwords are bcrypt-hashed via localRegister — miniyo-passwords key retired
       register: async (data) => {
         const result = await localRegister({
           email: data.email,
@@ -295,12 +296,12 @@ export const useMemberStore = create<MemberStore>()(
         return true
       },
 
-      // Routes through hybridAuth.localLogin — bcrypt.compare() validates.
+      // Validates via bcrypt.compare inside localLogin
       login: async (email, password) => {
         const result = await localLogin(email, password)
         if (!result.success) return false
 
-        // Restore the full member profile from persisted state if emails match.
+        // Restore full member profile from persisted state if email matches
         try {
           const raw = localStorage.getItem('miniyo-member')
           if (raw) {
@@ -321,7 +322,7 @@ export const useMemberStore = create<MemberStore>()(
           }
         } catch { /* ignore */ }
 
-        // No persisted profile found — set authenticated with basic info from hybridAuth.
+        // No persisted profile — seed from hybridAuth user
         set({
           customer: {
             id: `member-${Date.now()}`,
@@ -346,7 +347,7 @@ export const useMemberStore = create<MemberStore>()(
         return true
       },
 
-      // Clears all three stores + hybridAuth session.
+      // Clears all three stores + hybridAuth session key
       logout: () => {
         clearCartStore()
         clearWishlistStore()
@@ -410,7 +411,6 @@ export const useMemberStore = create<MemberStore>()(
           set({ addresses: [...addresses, newAddress] })
         }
       },
-
       removeAddress: (id) => { set({ addresses: get().addresses.filter(a => a.id !== id) }) },
       setDefaultAddress: (id) => { set({ addresses: get().addresses.map(a => ({ ...a, isDefault: a.id === id })) }) },
 
@@ -423,7 +423,6 @@ export const useMemberStore = create<MemberStore>()(
           set({ paymentMethods: [...methods, newMethod] })
         }
       },
-
       removePaymentMethod: (id) => { set({ paymentMethods: get().paymentMethods.filter(m => m.id !== id) }) },
       setDefaultPaymentMethod: (id) => { set({ paymentMethods: get().paymentMethods.map(m => ({ ...m, isDefault: m.id === id })) }) },
 
@@ -543,7 +542,7 @@ export const useMemberStore = create<MemberStore>()(
         return { success: true, code }
       },
 
-      // Now bcrypt-hashes the new password via hybridAuth.updateUserPassword.
+      // New password is bcrypt-hashed via updateUserPassword — no more plaintext writes
       resetPassword: async (email, code, _newCode, newPassword) => {
         if (_resetCodes[email] !== code) return false
         const ok = await updateUserPassword(email, newPassword)
