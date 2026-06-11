@@ -32,6 +32,22 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+// ── Admin Users (separate table for panel admins / staff) ──
+export const adminUsers = mysqlTable("admin_users", {
+  id: serial("id").primaryKey(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).default("").notNull(),
+  role: mysqlEnum("role", ["super_admin", "admin", "staff"]).default("staff").notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  passwordHash: varchar("passwordHash", { length: 255 }),
+  passwordSetAt: timestamp("passwordSetAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type AdminUser = typeof adminUsers.$inferSelect;
+export type InsertAdminUser = typeof adminUsers.$inferInsert;
+
 // ── Categories ──
 export const categories = mysqlTable("categories", {
   id: serial("id").primaryKey(),
