@@ -26,13 +26,12 @@ import { WishlistPage } from '@/pages/WishlistPage'
 import { PrivacyPage } from '@/pages/PrivacyPage'
 import { TermsPage } from '@/pages/TermsPage'
 import { useMemberStore } from '@/stores/memberStore'
+import { ADMIN_EMAIL, isAdminRole } from '@/lib/hybridAuth'
 import type { Locale } from '@/types'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
-  useEffect(() => {
-    window.scrollTo(0, 0)
-  }, [pathname])
+  useEffect(() => { window.scrollTo(0, 0) }, [pathname])
   return null
 }
 
@@ -49,28 +48,22 @@ function PageTransition({ children }: { children: React.ReactNode }) {
   )
 }
 
-// Redirects unauthenticated users to /login.
-// Used for /checkout and /account — pages that require a valid session.
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useMemberStore(s => s.isAuthenticated)
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
-  }
+  if (!isAuthenticated) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
-// Requires both isAuthenticated AND a known admin email.
-// Add legitimate admin emails to ADMIN_EMAILS below.
-const ADMIN_EMAILS = ['admin@miniyo.store']
+// AdminRoute uses hybridAuth ADMIN_EMAIL + isAdminRole — single source of truth.
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, customer } = useMemberStore(s => ({
     isAuthenticated: s.isAuthenticated,
     customer: s.customer,
   }))
-  const isAdmin = isAuthenticated && customer?.email != null && ADMIN_EMAILS.includes(customer.email)
-  if (!isAdmin) {
-    return <Navigate to="/login" replace />
-  }
+  const isAdmin = isAuthenticated &&
+    customer?.email != null &&
+    (customer.email === ADMIN_EMAIL || isAdminRole('super_admin'))
+  if (!isAdmin) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
@@ -97,29 +90,23 @@ function MainLayout({ locale, onLocaleChange, children }: {
 
 function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange: (l: Locale) => void }) {
   const location = useLocation()
-
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
-        {/* Auth Pages - No Layout */}
+        {/* Auth Pages */}
         <Route path="/login" element={<LoginPage locale={locale} />} />
         <Route path="/register" element={<RegisterPage locale={locale} />} />
 
-        {/* Admin Panel — guarded: must be authenticated AND an admin email */}
-        <Route
-          path="/admin"
-          element={
-            <AdminRoute>
-              <AdminPage />
-            </AdminRoute>
-          }
-        />
+        {/* Admin Panel */}
+        <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
 
-        {/* Public Storefront */}
+        {/* Storefront */}
         <Route path="/" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><HomePage locale={locale} /></MainLayout>} />
         <Route path="/shop" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><ShopPage locale={locale} /></MainLayout>} />
         <Route path="/product/:handle" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><ProductPage locale={locale} /></MainLayout>} />
         <Route path="/cart" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><CartPage locale={locale} /></MainLayout>} />
+        <Route path="/checkout" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><ProtectedRoute><CheckoutPage locale={locale} /></ProtectedRoute></MainLayout>} />
+        <Route path="/order-success/:orderNumber" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><OrderSuccessPage locale={locale} /></MainLayout>} />
         <Route path="/about" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><AboutPage locale={locale} /></MainLayout>} />
         <Route path="/faq" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><FAQPage locale={locale} /></MainLayout>} />
         <Route path="/contact" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><ContactPage locale={locale} /></MainLayout>} />
@@ -127,59 +114,19 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
         <Route path="/privacy" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><PrivacyPage /></MainLayout>} />
         <Route path="/terms" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><TermsPage /></MainLayout>} />
         <Route path="/wishlist" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><WishlistPage locale={locale} /></MainLayout>} />
-        <Route path="/order-success/:orderNumber" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><OrderSuccessPage locale={locale} /></MainLayout>} />
+        <Route path="/account" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><ProtectedRoute><MemberAreaPage locale={locale} /></ProtectedRoute></MainLayout>} />
 
-        {/* Protected: requires login */}
-        <Route
-          path="/checkout"
-          element={
-            <MainLayout locale={locale} onLocaleChange={onLocaleChange}>
-              <ProtectedRoute>
-                <CheckoutPage locale={locale} />
-              </ProtectedRoute>
-            </MainLayout>
-          }
-        />
-        <Route
-          path="/account"
-          element={
-            <MainLayout locale={locale} onLocaleChange={onLocaleChange}>
-              <ProtectedRoute>
-                <MemberAreaPage locale={locale} />
-              </ProtectedRoute>
-            </MainLayout>
-          }
-        />
-
-        {/* 404 catch-all — broken or invalid ad links show a clean error page */}
-        <Route
-          path="*"
-          element={
-            <MainLayout locale={locale} onLocaleChange={onLocaleChange}>
-              <div style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-                justifyContent: 'center', minHeight: '60vh', gap: '1rem',
-                textAlign: 'center', padding: '2rem',
-              }}>
-                <p style={{ fontSize: '4rem', fontWeight: 700, opacity: 0.12, lineHeight: 1 }}>404</p>
-                <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Page Not Found</h1>
-                <p style={{ color: 'var(--color-text-muted, #888)', maxWidth: '38ch' }}>
-                  The page you are looking for doesn&apos;t exist or has been moved.
-                </p>
-                <a
-                  href="/#/"
-                  style={{
-                    marginTop: '1rem', padding: '0.75rem 1.75rem',
-                    background: 'var(--color-primary, #01696f)', color: '#fff',
-                    borderRadius: '0.5rem', textDecoration: 'none', fontWeight: 600,
-                  }}
-                >
-                  Back to Home
-                </a>
-              </div>
-            </MainLayout>
-          }
-        />
+        {/* 404 */}
+        <Route path="*" element={
+          <MainLayout locale={locale} onLocaleChange={onLocaleChange}>
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'60vh', gap:'1rem', textAlign:'center', padding:'2rem' }}>
+              <h1 style={{ fontSize:'3rem', fontWeight:700, opacity:0.15 }}>404</h1>
+              <h2 style={{ fontSize:'1.5rem', fontWeight:600 }}>Page Not Found</h2>
+              <p style={{ color:'var(--color-text-muted,#888)', maxWidth:'40ch' }}>The page you are looking for doesn&apos;t exist or has been moved.</p>
+              <a href="/#/" style={{ marginTop:'1rem', padding:'0.75rem 1.5rem', background:'var(--color-primary,#01696f)', color:'#fff', borderRadius:'0.5rem', textDecoration:'none', fontWeight:600 }}>Back to Home</a>
+            </div>
+          </MainLayout>
+        } />
       </Routes>
     </AnimatePresence>
   )
