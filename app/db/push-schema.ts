@@ -74,7 +74,7 @@ async function pushSchema() {
     )`,
 
     // Categories
-    `CREATE TABLE IF NOT EXISTS categories (`
+    `CREATE TABLE IF NOT EXISTS categories (
       id INT AUTO_INCREMENT PRIMARY KEY,
       slug VARCHAR(100) NOT NULL UNIQUE,
       name VARCHAR(255) NOT NULL,
