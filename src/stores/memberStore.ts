@@ -241,6 +241,14 @@ const _resetCodes: Record<string, string> = {}
 // Referral tracking
 const _referralRewards: Record<string, number> = {}
 
+// Lazy import helper to avoid circular deps — cartStore imports nothing from memberStore
+function clearCartStore() {
+  try {
+    // Dynamically clear persisted cart from localStorage directly
+    localStorage.removeItem('miniyo-cart')
+  } catch { /* ignore */ }
+}
+
 export const useMemberStore = create<MemberStore>()(
   persist(
     (set, get) => ({
@@ -360,8 +368,27 @@ export const useMemberStore = create<MemberStore>()(
         return false
       },
 
+      // FIX: Full state wipe on logout — clears customer, all session data,
+      // the persisted localStorage key, and the cart to prevent data leakage
+      // between sessions. Previously only set isAuthenticated: false which left
+      // the customer object intact, causing membership benefits to persist.
       logout: () => {
-        set({ isAuthenticated: false })
+        // Clear the cart from localStorage directly (avoids circular import)
+        clearCartStore()
+        // Reset all member state to defaults
+        set({
+          customer: null,
+          isAuthenticated: false,
+          children: [],
+          addresses: [],
+          paymentMethods: [],
+          orders: [],
+          activities: [],
+          reviews: [],
+          cartAbandonedAt: null,
+        })
+        // Remove the persisted Zustand snapshot so next page load starts clean
+        localStorage.removeItem('miniyo-member')
       },
 
       updateProfile: (updates) => {
@@ -483,9 +510,13 @@ export const useMemberStore = create<MemberStore>()(
         }
       },
 
+      // FIX: Guard against unauthenticated access — previously only checked
+      // customer existence, allowing persisted customer data to grant discounts
+      // after logout. Now requires isAuthenticated: true as well.
       calculateDiscount: (subtotal) => {
-        const customer = get().customer
-        if (!customer) return { discount: 0, reason: '' }
+        const state = get()
+        if (!state.customer || !state.isAuthenticated) return { discount: 0, reason: '' }
+        const customer = state.customer
         const benefits = TIER_BENEFITS[customer.membershipTier]
         if (!customer.firstOrderDiscountUsed && customer.totalOrders === 0) {
           return { discount: subtotal * 0.10, reason: 'Welcome Offer (10%)' }
@@ -496,10 +527,12 @@ export const useMemberStore = create<MemberStore>()(
         return { discount: 0, reason: '' }
       },
 
+      // FIX: Same isAuthenticated guard applied to shipping calculation.
       calculateShipping: (subtotal) => {
         if (subtotal >= 50) return { fee: 0, reason: 'Free shipping (over $50)' }
-        const customer = get().customer
-        if (!customer) return { fee: null, reason: '' }
+        const state = get()
+        if (!state.customer || !state.isAuthenticated) return { fee: null, reason: '' }
+        const customer = state.customer
         const currentMonth = getCurrentMonth()
         if (customer.freeShippingMonth !== currentMonth) {
           set({ customer: { ...customer, freeShippingUsed: 0, freeShippingMonth: currentMonth } })
@@ -511,11 +544,12 @@ export const useMemberStore = create<MemberStore>()(
         return { fee: null, reason: '' }
       },
 
+      // FIX: Same isAuthenticated guard applied to free shipping eligibility check.
       canUseFreeShipping: () => {
-        const customer = get().customer
-        if (!customer) return false
-        const benefits = TIER_BENEFITS[customer.membershipTier]
-        return customer.freeShippingUsed < benefits.freeShippingPerMonth
+        const state = get()
+        if (!state.customer || !state.isAuthenticated) return false
+        const benefits = TIER_BENEFITS[state.customer.membershipTier]
+        return state.customer.freeShippingUsed < benefits.freeShippingPerMonth
       },
 
       recordOrder: (order) => {
