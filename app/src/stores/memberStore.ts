@@ -361,7 +361,17 @@ export const useMemberStore = create<MemberStore>()(
       },
 
       logout: () => {
-        set({ isAuthenticated: false })
+        set({
+          isAuthenticated: false,
+          customer: null,
+          addresses: [],
+          paymentMethods: [],
+          orders: [],
+          activities: [],
+          children: [],
+          reviews: [],
+          cartAbandonedAt: null,
+        })
       },
 
       updateProfile: (updates) => {
