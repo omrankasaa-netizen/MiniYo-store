@@ -8,6 +8,8 @@ import { env } from "./lib/env";
 const JWT_ALG = "HS256";
 const LOCAL_SESSION_SECRET = () => new TextEncoder().encode(env.appSecret + "_local");
 
+export type AdminRole = "super_admin" | "admin" | "staff";
+
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
 }
@@ -91,7 +93,7 @@ export async function findOrCreateLocalUser(data: {
   return db.select().from(schema.users).where(eq(schema.users.id, result.id)).limit(1).then(r => r[0]!);
 }
 
-// ── Admin User (DB-backed) ──
+// ── Admin Users (back-office) ──
 
 export async function countAdminUsers(): Promise<number> {
   const db = getDb();
@@ -109,11 +111,37 @@ export async function findAdminUserByEmail(email: string) {
   return rows.at(0);
 }
 
+export async function findAdminUserById(id: number) {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(schema.adminUsers)
+    .where(eq(schema.adminUsers.id, id))
+    .limit(1);
+  return rows.at(0);
+}
+
+export async function listAdminStaff() {
+  const db = getDb();
+  return db
+    .select({
+      id: schema.adminUsers.id,
+      email: schema.adminUsers.email,
+      name: schema.adminUsers.name,
+      role: schema.adminUsers.role,
+      isActive: schema.adminUsers.isActive,
+      createdAt: schema.adminUsers.createdAt,
+      passwordSet: schema.adminUsers.passwordHash,
+    })
+    .from(schema.adminUsers)
+    .orderBy(schema.adminUsers.id);
+}
+
 export async function createAdminUser(email: string): Promise<schema.AdminUser> {
   const db = getDb();
   const [result] = await db
     .insert(schema.adminUsers)
-    .values({ email, passwordHash: null, passwordSetAt: null })
+    .values({ email, passwordHash: null, passwordSetAt: null, role: "super_admin" })
     .$returningId();
   const rows = await db
     .select()
@@ -121,6 +149,38 @@ export async function createAdminUser(email: string): Promise<schema.AdminUser> 
     .where(eq(schema.adminUsers.id, result.id))
     .limit(1);
   return rows[0]!;
+}
+
+export async function createStaffUser(data: {
+  email: string;
+  name: string;
+  password: string;
+  role: AdminRole;
+}): Promise<schema.AdminUser> {
+  const db = getDb();
+  const passwordHash = await hashPassword(data.password);
+  const [result] = await db
+    .insert(schema.adminUsers)
+    .values({
+      email: data.email,
+      name: data.name,
+      passwordHash,
+      passwordSetAt: new Date(),
+      role: data.role,
+      isActive: true,
+    })
+    .$returningId();
+  const rows = await db
+    .select()
+    .from(schema.adminUsers)
+    .where(eq(schema.adminUsers.id, result.id))
+    .limit(1);
+  return rows[0]!;
+}
+
+export async function deleteAdminStaff(id: number): Promise<void> {
+  const db = getDb();
+  await db.delete(schema.adminUsers).where(eq(schema.adminUsers.id, id));
 }
 
 export async function setAdminPassword(email: string, password: string): Promise<void> {
@@ -132,15 +192,22 @@ export async function setAdminPassword(email: string, password: string): Promise
     .where(eq(schema.adminUsers.email, email));
 }
 
-export async function signAdminSession(adminId: number, email: string): Promise<string> {
-  return new jose.SignJWT({ adminId, email, type: "admin" })
+// Session tokens now carry role so the frontend can gate permissions
+export async function signAdminSession(
+  adminId: number,
+  email: string,
+  role: AdminRole = "super_admin",
+): Promise<string> {
+  return new jose.SignJWT({ adminId, email, role, type: "admin" })
     .setProtectedHeader({ alg: JWT_ALG })
     .setIssuedAt()
     .setExpirationTime("30d")
     .sign(LOCAL_SESSION_SECRET());
 }
 
-export async function verifyAdminSession(token: string): Promise<{ adminId: number; email: string } | null> {
+export async function verifyAdminSession(
+  token: string,
+): Promise<{ adminId: number; email: string; role: AdminRole } | null> {
   try {
     const { payload } = await jose.jwtVerify(token, LOCAL_SESSION_SECRET(), {
       algorithms: [JWT_ALG],
@@ -150,6 +217,7 @@ export async function verifyAdminSession(token: string): Promise<{ adminId: numb
     return {
       adminId: payload.adminId as number,
       email: payload.email as string,
+      role: (payload.role as AdminRole) ?? "super_admin",
     };
   } catch {
     return null;

@@ -7,14 +7,12 @@ import { fileURLToPath } from "url";
 
 type App = Hono<{ Bindings: HttpBindings }>;
 
-// Compute __dirname from import.meta.url for ESM compatibility (Node 18+)
+// When esbuild bundles api/boot.ts → dist/boot.js, import.meta.url resolves
+// to dist/boot.js, so __dirname === 'dist/'. dist/public sits alongside it.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function serveStaticFiles(app: App) {
-  // Resolve dist/public relative to this file's location in the bundle
-  // When bundled to dist/boot.js, this file resolves to dist/<bundled>,
-  // so ../dist/public points to the correct output directory.
-  const distPath = path.resolve(__dirname, "../dist/public");
+  const distPath = path.resolve(__dirname, "./public");
 
   app.use("*", serveStatic({ root: distPath }));
 
@@ -23,7 +21,7 @@ export function serveStaticFiles(app: App) {
     if (!accept.includes("text/html")) {
       return c.json({ error: "Not Found" }, 404);
     }
-    const indexPath = path.resolve(distPath, "app/index.html");
+    const indexPath = path.resolve(distPath, "index.html");
     const content = fs.readFileSync(indexPath, "utf-8");
     return c.html(content);
   });

@@ -4,8 +4,5 @@ nixPkgs = ["nodejs_20", "npm-9_x"]
 [phases.build]
 cmds = ["npm ci", "npm run build"]
 
-[phases.postbuild]
-cmds = ["npm run setup-admin"]
-
 [start]
 cmd = "NODE_ENV=production node dist/boot.js"

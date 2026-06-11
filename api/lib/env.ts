@@ -28,7 +28,8 @@ export const env = {
   smtpHost: optional("SMTP_HOST", "smtpout.secureserver.net"),
   smtpPort: parseInt(optional("SMTP_PORT", "465")),
   smtpUser: optional("SMTP_USER", "Management@miniyo.store"),
-  smtpPass: optional("SMTP_PASS", "MiniYostore!b"),
+  // SMTP_PASS must be set as a Railway environment variable — no default here
+  smtpPass: required("SMTP_PASS"),
 
   // ── Notification Recipients ──
   // Comma-separated list; all receive a copy of every new order alert
