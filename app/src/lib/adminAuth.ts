@@ -1,15 +1,18 @@
 /**
  * Admin Authentication
- *
- * Direct HTTP-based admin auth via /api/admin/login.
- * No tRPC dependencies.
+ * Direct HTTP-based admin auth via /api/admin/login and /api/admin/me.
  */
 
 const ADMIN_USER_KEY = "miniyo_admin_user";
 
+export type AdminRole = "super_admin" | "admin" | "staff";
+
 export interface AdminAuthUser {
   id: number;
   email: string;
+  name: string;
+  role: AdminRole;
+  permissions: string[];
   passwordSet: boolean;
 }
 
@@ -30,10 +33,15 @@ export function clearAdminUser() {
   sessionStorage.removeItem(ADMIN_USER_KEY);
 }
 
+/** Check if the current user has a specific permission */
+export function can(user: AdminAuthUser | null, permission: string): boolean {
+  return user?.permissions.includes(permission) ?? false;
+}
+
 export async function adminLogin(
   email: string,
   password: string
-): Promise<{ success: boolean; email: string; user?: AdminAuthUser }> {
+): Promise<{ success: boolean; email: string; name: string; role: AdminRole; permissions: string[]; user?: AdminAuthUser }> {
   const response = await fetch("/api/admin/login", {
     method: "POST",
     credentials: "include",
@@ -46,4 +54,17 @@ export async function adminLogin(
     throw new Error(msg);
   }
   return data;
+}
+
+/** Rehydrate admin session from the server (call on app mount) */
+export async function fetchAdminMe(): Promise<AdminAuthUser | null> {
+  try {
+    const res = await fetch("/api/admin/me", { credentials: "include" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.email) return null;
+    return data as AdminAuthUser;
+  } catch {
+    return null;
+  }
 }
