@@ -145,6 +145,9 @@ interface MemberStore {
   reviews: ProductReview[]
   cartAbandonedAt: string | null
 
+  // NOTE: register() and login() in this store are intentionally no-ops.
+  // All authentication goes through useAuth() → hybridAuth → tRPC localAuthRouter
+  // which uses bcrypt + JWT session cookies. Do NOT call these directly.
   register: (data: { name: string; email: string; phone?: string; dateOfBirth?: string; password: string; referralCode?: string }) => boolean
   login: (email: string, password: string) => boolean
   logout: () => void
@@ -183,9 +186,6 @@ interface MemberStore {
 
   getOrders: () => CustomerOrder[]
 
-  requestPasswordReset: (email: string) => { success: boolean; code: string } | null
-  resetPassword: (email: string, code: string, newCode: string, newPassword: string) => boolean
-
   getReferralCode: () => string
   getReferralUrl: () => string
   applyReferral: (code: string) => boolean
@@ -217,19 +217,13 @@ function generateReferralCode(name: string): string {
   return `${prefix}${num}`
 }
 
-function getPasswordStore(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem('miniyo-passwords')
-    if (raw) return JSON.parse(raw)
-  } catch { /* ignore */ }
-  return {}
-}
-function setPasswordStore(store: Record<string, string>) {
-  localStorage.setItem('miniyo-passwords', JSON.stringify(store))
-}
-
-const _resetCodes: Record<string, string> = {}
-const _referralRewards: Record<string, number> = {}
+// One-time migration: remove the legacy plain-text password store if it exists.
+// This runs once on module load and is safe to call multiple times.
+try {
+  if (typeof localStorage !== 'undefined' && localStorage.getItem('miniyo-passwords')) {
+    localStorage.removeItem('miniyo-passwords')
+  }
+} catch { /* ignore — SSR or restricted environments */ }
 
 function clearCartStore() {
   try {
@@ -250,117 +244,25 @@ export const useMemberStore = create<MemberStore>()(
       reviews: [],
       cartAbandonedAt: null,
 
-      register: (data) => {
-        const existing = get().customer
-        if (existing && existing.email === data.email) return false
-
-        let referralBonus = 0
-        const allStores = Object.keys(localStorage)
-          .filter(k => k.startsWith('miniyo-member'))
-          .map(k => {
-            try { return JSON.parse(localStorage.getItem(k)!) } catch { return null }
-          })
-          .filter(Boolean)
-
-        for (const store of allStores) {
-          const state = store.state || store
-          if (state.customer?.referralCode === data.referralCode) {
-            _referralRewards[state.customer.email] = (_referralRewards[state.customer.email] || 0) + 5
-            referralBonus = 5
-            break
-          }
-        }
-
-        const id = `member-${Date.now()}`
-        const customer: MemberCustomer = {
-          id,
-          name: data.name,
-          email: data.email,
-          phone: data.phone || null,
-          dateOfBirth: data.dateOfBirth || null,
-          membershipTier: 'bronze',
-          totalOrders: 0,
-          totalSpent: 0,
-          freeShippingUsed: 0,
-          freeShippingMonth: getCurrentMonth(),
-          firstOrderDiscountUsed: false,
-          birthdayOfferUsed: null,
-          registeredAt: new Date().toISOString(),
-          referralCode: generateReferralCode(data.name),
-          referralCount: 0,
-          referredBy: data.referralCode || null,
-        }
-
-        const pwStore = getPasswordStore()
-        pwStore[data.email] = data.password
-        setPasswordStore(pwStore)
-
-        const activities: { action: string; details: string; amount?: number; date: string }[] = [{
-          action: 'register',
-          details: 'Welcome to Miniyo! You are now a Bronze member.',
-          date: new Date().toISOString(),
-        }]
-        if (referralBonus > 0) {
-          activities.push({
-            action: 'referral_bonus',
-            details: `You received $${referralBonus} referral credit from code ${data.referralCode}!`,
-            amount: referralBonus,
-            date: new Date().toISOString(),
-          })
-        }
-
-        set({
-          customer,
-          isAuthenticated: true,
-          addresses: [],
-          paymentMethods: [{
-            id: 'pm-default-cod',
-            type: 'cod',
-            label: 'Cash on Delivery',
-            isDefault: true,
-          }],
-          orders: [],
-          activities,
-          cartAbandonedAt: null,
-        })
-        return true
-      },
-
-      login: (email, password) => {
-        const store = get()
-        const pwStore = getPasswordStore()
-        if (store.customer && store.customer.email === email && pwStore[email] === password) {
-          set({ isAuthenticated: true })
-          return true
-        }
-        try {
-          const raw = localStorage.getItem('miniyo-member')
-          if (raw) {
-            const parsed = JSON.parse(raw)
-            const state = parsed.state || parsed
-            if (state.customer?.email === email && pwStore[email] === password) {
-              set({
-                customer: state.customer,
-                isAuthenticated: true,
-                addresses: state.addresses || [],
-                paymentMethods: state.paymentMethods || [{ id: 'pm-default-cod', type: 'cod', label: 'Cash on Delivery', isDefault: true }],
-                orders: state.orders || [],
-                activities: state.activities || [],
-                reviews: state.reviews || [],
-              })
-              return true
-            }
-          }
-        } catch { /* ignore */ }
+      // Stub — real registration goes through useAuth() → tRPC localAuthRouter.register
+      // which uses bcrypt password hashing server-side. This stub exists only so that
+      // legacy call sites don't throw at runtime while being migrated.
+      register: (_data) => {
+        console.warn('[memberStore] register() called directly — use useAuth().register() instead')
         return false
       },
 
-      // FIX #1 — Full state wipe on logout.
-      // Previously only set isAuthenticated:false, leaving customer object intact
-      // in memory AND in the Zustand persist snapshot. On next load, the persisted
-      // snapshot would rehydrate customer data and calculateDiscount/calculateShipping
-      // would grant membership benefits to any visitor. Now we reset all fields,
-      // clear the cart, and remove the persisted localStorage key entirely.
+      // Stub — real login goes through useAuth() → tRPC localAuthRouter.login.
+      // Returns false so that any direct callers fail gracefully instead of
+      // bypassing the server-side bcrypt check.
+      login: (_email, _password) => {
+        console.warn('[memberStore] login() called directly — use useAuth().login() instead')
+        return false
+      },
+
+      // Full state wipe on logout — clears customer, all session data,
+      // the persisted localStorage key, and the cart to prevent data leakage
+      // between sessions.
       logout: () => {
         clearCartStore()
         set({
@@ -386,6 +288,7 @@ export const useMemberStore = create<MemberStore>()(
       syncProfile: (user) => {
         if (!user.email) return
         const existing = get().customer
+
         if (existing && existing.email === user.email) {
           set({
             customer: {
@@ -492,9 +395,8 @@ export const useMemberStore = create<MemberStore>()(
         }
       },
 
-      // FIX #2 — isAuthenticated guard on calculateDiscount.
-      // Previously only checked customer != null, so persisted customer data
-      // after logout still granted discounts to any browser visitor.
+      // Guard: requires isAuthenticated: true so persisted customer data
+      // after logout cannot grant discounts to unauthenticated visitors.
       calculateDiscount: (subtotal) => {
         const state = get()
         if (!state.customer || !state.isAuthenticated) return { discount: 0, reason: '' }
@@ -509,7 +411,6 @@ export const useMemberStore = create<MemberStore>()(
         return { discount: 0, reason: '' }
       },
 
-      // FIX #3 — isAuthenticated guard on calculateShipping.
       calculateShipping: (subtotal) => {
         if (subtotal >= 50) return { fee: 0, reason: 'Free shipping (over $50)' }
         const state = get()
@@ -526,7 +427,6 @@ export const useMemberStore = create<MemberStore>()(
         return { fee: null, reason: '' }
       },
 
-      // FIX #4 — isAuthenticated guard on canUseFreeShipping.
       canUseFreeShipping: () => {
         const state = get()
         if (!state.customer || !state.isAuthenticated) return false
@@ -575,24 +475,9 @@ export const useMemberStore = create<MemberStore>()(
 
       getOrders: () => get().orders,
 
-      requestPasswordReset: (email) => {
-        const customer = get().customer
-        if (!customer || customer.email !== email) return null
-        const code = Math.floor(100000 + Math.random() * 900000).toString()
-        _resetCodes[email] = code
-        return { success: true, code }
+      getReferralCode: () => {
+        return get().customer?.referralCode || ''
       },
-
-      resetPassword: (email, code, _newCode, newPassword) => {
-        if (_resetCodes[email] !== code) return false
-        const pwStore = getPasswordStore()
-        pwStore[email] = newPassword
-        setPasswordStore(pwStore)
-        delete _resetCodes[email]
-        return true
-      },
-
-      getReferralCode: () => get().customer?.referralCode || '',
 
       getReferralUrl: () => {
         const code = get().customer?.referralCode || ''
@@ -602,7 +487,10 @@ export const useMemberStore = create<MemberStore>()(
       applyReferral: (code) => {
         if (!code) return false
         set(state => ({
-          customer: state.customer ? { ...state.customer, referredBy: code } : null,
+          customer: state.customer ? {
+            ...state.customer,
+            referredBy: code,
+          } : null,
         }))
         return true
       },
@@ -616,7 +504,9 @@ export const useMemberStore = create<MemberStore>()(
         set({ reviews: [...get().reviews, newReview] })
       },
 
-      getProductReviews: (productId) => get().reviews.filter(r => r.productId === productId),
+      getProductReviews: (productId) => {
+        return get().reviews.filter(r => r.productId === productId)
+      },
 
       getAverageRating: (productId) => {
         const productReviews = get().reviews.filter(r => r.productId === productId)
@@ -625,19 +515,33 @@ export const useMemberStore = create<MemberStore>()(
       },
 
       markHelpful: (reviewId) => {
-        set({ reviews: get().reviews.map(r => r.id === reviewId ? { ...r, helpful: r.helpful + 1 } : r) })
+        set({
+          reviews: get().reviews.map(r =>
+            r.id === reviewId ? { ...r, helpful: r.helpful + 1 } : r
+          ),
+        })
       },
 
-      markCartAbandoned: () => set({ cartAbandonedAt: new Date().toISOString() }),
-      recoverCart: () => set({ cartAbandonedAt: null }),
-      dismissAbandonedCart: () => set({ cartAbandonedAt: null }),
+      markCartAbandoned: () => {
+        set({ cartAbandonedAt: new Date().toISOString() })
+      },
+
+      recoverCart: () => {
+        set({ cartAbandonedAt: null })
+      },
+
+      dismissAbandonedCart: () => {
+        set({ cartAbandonedAt: null })
+      },
 
       addChild: (child) => {
         const newChild: Child = { ...child, id: `child-${Date.now()}` }
         set({ children: [...get().children, newChild] })
       },
 
-      removeChild: (id) => set({ children: get().children.filter(c => c.id !== id) }),
+      removeChild: (id) => {
+        set({ children: get().children.filter(c => c.id !== id) })
+      },
 
       updateChild: (id, updates) => {
         set({ children: get().children.map(c => c.id === id ? { ...c, ...updates } : c) })
@@ -678,7 +582,7 @@ export const useMemberStore = create<MemberStore>()(
           customer: { ...customer, birthdayOfferUsed: thisMonth },
           activities: [...get().activities, {
             action: 'birthday',
-            details: 'Birthday offer claimed! Free delivery on your birthday month.',
+            details: `Birthday offer claimed! Free delivery on your birthday month.`,
             date: new Date().toISOString(),
           }],
         })
