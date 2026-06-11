@@ -55,7 +55,7 @@ export interface MemberCustomer {
   freeShippingUsed: number
   freeShippingMonth: string
   firstOrderDiscountUsed: boolean
-  birthdayOfferUsed: string | null
+  birthdayOfferUsed: string | null // YYYY-MM of when birthday offer was claimed
   registeredAt: string
   referralCode: string
   referralCount: number
@@ -159,16 +159,19 @@ interface MemberStore {
   removePaymentMethod: (id: string) => void
   setDefaultPaymentMethod: (id: string) => void
 
+  // Children
   addChild: (child: Omit<Child, 'id'>) => void
   removeChild: (id: string) => void
   updateChild: (id: string, updates: Partial<Child>) => void
   getChildAge: (dateOfBirth: string) => number
   getAgeGroup: (ageInMonths: number) => string
 
+  // Birthday
   isBirthday: () => boolean
   claimBirthdayOffer: () => boolean
   getBirthdayOfferStatus: () => { isBirthday: boolean; claimed: boolean; canClaim: boolean }
 
+  // Recommendations
   getProductRecommendations: (products: any[]) => any[]
 
   getBenefits: () => MembershipBenefit
@@ -183,18 +186,22 @@ interface MemberStore {
 
   getOrders: () => CustomerOrder[]
 
+  // Password reset
   requestPasswordReset: (email: string) => { success: boolean; code: string } | null
   resetPassword: (email: string, code: string, newCode: string, newPassword: string) => boolean
 
+  // Referral
   getReferralCode: () => string
   getReferralUrl: () => string
   applyReferral: (code: string) => boolean
 
+  // Reviews
   addReview: (review: Omit<ProductReview, 'id' | 'createdAt'>) => void
   getProductReviews: (productId: string) => ProductReview[]
   getAverageRating: (productId: string) => number
   markHelpful: (reviewId: string) => void
 
+  // Abandoned cart
   markCartAbandoned: () => void
   recoverCart: () => void
   dismissAbandonedCart: () => void
@@ -217,6 +224,7 @@ function generateReferralCode(name: string): string {
   return `${prefix}${num}`
 }
 
+// Password storage - persisted via localStorage for reliability
 function getPasswordStore(): Record<string, string> {
   try {
     const raw = localStorage.getItem('miniyo-passwords')
@@ -228,11 +236,14 @@ function setPasswordStore(store: Record<string, string>) {
   localStorage.setItem('miniyo-passwords', JSON.stringify(store))
 }
 
+// In-memory storage for reset codes
 const _resetCodes: Record<string, string> = {}
+// Referral tracking
 const _referralRewards: Record<string, number> = {}
 
-// Clears the persisted cart from localStorage directly (avoids circular import)
-function clearCartStore() {
+// Wipe the persisted cart key from localStorage without importing cartStore
+// (avoids circular dependency — cartStore does NOT import memberStore)
+function clearCartStorage() {
   try {
     localStorage.removeItem('miniyo-cart')
   } catch { /* ignore */ }
@@ -255,6 +266,7 @@ export const useMemberStore = create<MemberStore>()(
         const existing = get().customer
         if (existing && existing.email === data.email) return false
 
+        // Check referral
         let referralBonus = 0
         const allStores = Object.keys(localStorage)
           .filter(k => k.startsWith('miniyo-member'))
@@ -356,14 +368,15 @@ export const useMemberStore = create<MemberStore>()(
         return false
       },
 
-      // SECURITY FIX: Full state wipe on logout.
-      // Previously only set isAuthenticated: false, leaving the customer object
-      // intact in memory AND in localStorage via Zustand persist. This allowed
-      // any visitor to receive membership discounts and free shipping without
-      // being signed in. Now clears all session data and removes the persisted
-      // snapshot so the next page load starts completely clean.
+      // Full state wipe on logout:
+      // 1. Resets all Zustand state fields to defaults
+      // 2. Removes the persisted miniyo-member snapshot from localStorage so
+      //    the next page load does not rehydrate a stale session
+      // 3. Removes miniyo-cart from localStorage so cart items don't leak to
+      //    the next visitor (in-memory cart is reset by authStore.logout via
+      //    useCartStore.getState().clearCart())
       logout: () => {
-        clearCartStore()
+        clearCartStorage()
         set({
           customer: null,
           isAuthenticated: false,
@@ -494,9 +507,10 @@ export const useMemberStore = create<MemberStore>()(
         }
       },
 
-      // SECURITY FIX: Requires isAuthenticated: true before applying any discount.
-      // Previously only checked customer existence, so persisted customer data
-      // after logout would silently grant Bronze/Silver/Gold discounts to guests.
+      // Guard: requires both customer AND isAuthenticated.
+      // A persisted customer object alone (after logout) must never grant
+      // discounts — isAuthenticated is reset to false on logout so this
+      // is the critical gate that stops the leakage.
       calculateDiscount: (subtotal) => {
         const state = get()
         if (!state.customer || !state.isAuthenticated) return { discount: 0, reason: '' }
@@ -511,7 +525,7 @@ export const useMemberStore = create<MemberStore>()(
         return { discount: 0, reason: '' }
       },
 
-      // SECURITY FIX: Same isAuthenticated guard for free shipping calculation.
+      // Same isAuthenticated guard for shipping.
       calculateShipping: (subtotal) => {
         if (subtotal >= 50) return { fee: 0, reason: 'Free shipping (over $50)' }
         const state = get()
@@ -528,7 +542,7 @@ export const useMemberStore = create<MemberStore>()(
         return { fee: null, reason: '' }
       },
 
-      // SECURITY FIX: Same isAuthenticated guard for free shipping eligibility.
+      // Same isAuthenticated guard for free shipping eligibility.
       canUseFreeShipping: () => {
         const state = get()
         if (!state.customer || !state.isAuthenticated) return false

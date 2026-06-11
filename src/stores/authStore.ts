@@ -32,15 +32,22 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   setLoading: (loading) => set({ isLoading: loading }),
 
-  // FIX: authStore.logout() now calls useMemberStore.logout() to keep both
-  // stores in sync. Previously authStore could be cleared while memberStore
-  // still held the authenticated customer, leaving membership benefits active.
+  // Unified logout: wipes authStore, memberStore, and in-memory cart together.
+  // Import lazily via getState() to avoid circular module dependencies.
   logout: () => {
-    // Lazy import to avoid circular dependency
-    import('@/stores/memberStore').then(({ useMemberStore }) => {
-      useMemberStore.getState().logout()
-    })
+    // 1. Reset auth state
     set({ user: null, isAuthenticated: false, isAdmin: false })
+    // 2. Wipe member session + localStorage snapshot + persisted cart
+    try {
+      const { useMemberStore } = require('@/stores/memberStore')
+      useMemberStore.getState().logout()
+    } catch { /* ignore if not yet loaded */ }
+    // 3. Clear in-memory Zustand cart (memberStore.logout already removes the
+    //    localStorage key, but the running Zustand instance also needs a reset)
+    try {
+      const { useCartStore } = require('@/stores/cartStore')
+      useCartStore.getState().clearCart()
+    } catch { /* ignore if not yet loaded */ }
   },
 
   setLocale: (locale) => {

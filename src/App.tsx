@@ -49,8 +49,8 @@ function PageTransition({ children }: { children: React.ReactNode }) {
   )
 }
 
-// SECURITY FIX: ProtectedRoute — redirects unauthenticated visitors to /login.
-// Wraps /checkout and /account so neither can be reached without a valid session.
+// Redirects unauthenticated users to /login.
+// Used for /checkout and /account — pages that require a valid session.
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useMemberStore(s => s.isAuthenticated)
   if (!isAuthenticated) {
@@ -59,8 +59,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-// SECURITY FIX: AdminRoute — requires isAuthenticated AND a known admin email.
-// Previously /admin was completely open — no authentication required at all.
+// Requires both isAuthenticated AND a known admin email.
+// Add legitimate admin emails to ADMIN_EMAILS below.
 const ADMIN_EMAILS = ['admin@miniyo.store']
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, customer } = useMemberStore(s => ({
@@ -105,7 +105,7 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
         <Route path="/login" element={<LoginPage locale={locale} />} />
         <Route path="/register" element={<RegisterPage locale={locale} />} />
 
-        {/* SECURITY FIX: Admin Panel — now guarded by AdminRoute */}
+        {/* Admin Panel — guarded: must be authenticated AND an admin email */}
         <Route
           path="/admin"
           element={
@@ -115,14 +115,21 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
           }
         />
 
-        {/* Main Storefront */}
+        {/* Public Storefront */}
         <Route path="/" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><HomePage locale={locale} /></MainLayout>} />
         <Route path="/shop" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><ShopPage locale={locale} /></MainLayout>} />
         <Route path="/product/:handle" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><ProductPage locale={locale} /></MainLayout>} />
         <Route path="/cart" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><CartPage locale={locale} /></MainLayout>} />
+        <Route path="/about" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><AboutPage locale={locale} /></MainLayout>} />
+        <Route path="/faq" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><FAQPage locale={locale} /></MainLayout>} />
+        <Route path="/contact" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><ContactPage locale={locale} /></MainLayout>} />
+        <Route path="/track-order" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><TrackOrderPage locale={locale} /></MainLayout>} />
+        <Route path="/privacy" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><PrivacyPage /></MainLayout>} />
+        <Route path="/terms" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><TermsPage /></MainLayout>} />
+        <Route path="/wishlist" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><WishlistPage locale={locale} /></MainLayout>} />
+        <Route path="/order-success/:orderNumber" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><OrderSuccessPage locale={locale} /></MainLayout>} />
 
-        {/* SECURITY FIX: /checkout — now wrapped in ProtectedRoute.
-            Unauthenticated visitors are redirected to /login. */}
+        {/* Protected: requires login */}
         <Route
           path="/checkout"
           element={
@@ -133,18 +140,6 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
             </MainLayout>
           }
         />
-
-        <Route path="/order-success/:orderNumber" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><OrderSuccessPage locale={locale} /></MainLayout>} />
-        <Route path="/about" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><AboutPage locale={locale} /></MainLayout>} />
-        <Route path="/faq" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><FAQPage locale={locale} /></MainLayout>} />
-        <Route path="/contact" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><ContactPage locale={locale} /></MainLayout>} />
-        <Route path="/track-order" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><TrackOrderPage locale={locale} /></MainLayout>} />
-        <Route path="/privacy" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><PrivacyPage /></MainLayout>} />
-        <Route path="/terms" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><TermsPage /></MainLayout>} />
-        <Route path="/wishlist" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><WishlistPage locale={locale} /></MainLayout>} />
-
-        {/* SECURITY FIX: /account — now wrapped in ProtectedRoute.
-            Unauthenticated visitors are redirected to /login. */}
         <Route
           path="/account"
           element={
@@ -156,17 +151,31 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
           }
         />
 
-        {/* FIX: 404 catch-all — shows a clean not-found page instead of blank white screen.
-            Important for ad campaigns — broken links now land gracefully. */}
+        {/* 404 catch-all — broken or invalid ad links show a clean error page */}
         <Route
           path="*"
           element={
             <MainLayout locale={locale} onLocaleChange={onLocaleChange}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem', textAlign: 'center', padding: '2rem' }}>
-                <h1 style={{ fontSize: '3rem', fontWeight: 700, opacity: 0.15 }}>404</h1>
-                <h2 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Page Not Found</h2>
-                <p style={{ color: 'var(--color-text-muted, #888)', maxWidth: '40ch' }}>The page you are looking for doesn&apos;t exist or has been moved.</p>
-                <a href="/#/" style={{ marginTop: '1rem', padding: '0.75rem 1.5rem', background: 'var(--color-primary, #01696f)', color: '#fff', borderRadius: '0.5rem', textDecoration: 'none', fontWeight: 600 }}>Back to Home</a>
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                justifyContent: 'center', minHeight: '60vh', gap: '1rem',
+                textAlign: 'center', padding: '2rem',
+              }}>
+                <p style={{ fontSize: '4rem', fontWeight: 700, opacity: 0.12, lineHeight: 1 }}>404</p>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Page Not Found</h1>
+                <p style={{ color: 'var(--color-text-muted, #888)', maxWidth: '38ch' }}>
+                  The page you are looking for doesn&apos;t exist or has been moved.
+                </p>
+                <a
+                  href="/#/"
+                  style={{
+                    marginTop: '1rem', padding: '0.75rem 1.75rem',
+                    background: 'var(--color-primary, #01696f)', color: '#fff',
+                    borderRadius: '0.5rem', textDecoration: 'none', fontWeight: 600,
+                  }}
+                >
+                  Back to Home
+                </a>
               </div>
             </MainLayout>
           }
