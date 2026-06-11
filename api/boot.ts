@@ -9,7 +9,7 @@ import { createOAuthCallbackHandler } from "./kimi/auth";
 import { Paths } from "@contracts/constants";
 import { handleAdminLogin } from "./admin-login-handler";
 import { setupAdmin } from "./setup-admin";
-import { startEmailQueueWorker } from "./email/emailQueue";
+import { startEmailWorker } from "./email-worker";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
@@ -117,7 +117,7 @@ if (env.isProduction) {
   const port = parseInt(process.env.PORT || "3000");
   serve({ fetch: app.fetch, port }, () => {
     console.log(`Server running on http://localhost:${port}/`);
-    // Start email queue worker — drains email_queue table every 60 seconds
-    startEmailQueueWorker();
+    // Start email worker after server is listening
+    startEmailWorker();
   });
 }

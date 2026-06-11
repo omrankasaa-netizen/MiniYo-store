@@ -7,6 +7,8 @@ import {
   faqs, promoCodes, wishlistItems, inventoryMovements,
 } from "@db/schema";
 import { eq, desc, and, sql, count } from "drizzle-orm";
+import { env } from "./lib/env";
+import { buildOrderNotificationHtml } from "./lib/mailer";
 
 // ── Products ──
 const productRouter = createRouter({
@@ -227,7 +229,6 @@ const orderRouter = createRouter({
 
       const orderId = result.id;
 
-      // Insert order items
       if (input.items.length > 0) {
         await db.insert(orderItems).values(
           input.items.map(item => ({
@@ -236,6 +237,7 @@ const orderRouter = createRouter({
             productName: item.productName,
             quantity: item.quantity,
             unitPrice: String(item.unitPrice),
+            lineTotal: String(item.unitPrice * item.quantity),
             sku: item.sku,
             color: item.color,
             size: item.size,
@@ -250,13 +252,36 @@ const orderRouter = createRouter({
           .where(eq(products.id, item.productId));
       }
 
-      // Queue order notification email
-      await db.insert(emailQueue).values({
-        recipient: "miniyo.store.lb@gmail.com",
-        subject: `New Order: ${input.orderNumber} — ${input.customerName}`,
-        body: `Order ${input.orderNumber} from ${input.customerName}\nPhone: ${input.customerPhone}\nTotal: $${input.grandTotal}\nPayment: ${input.paymentMethod}`,
-        template: "order_notification",
+      // Queue notification emails to all staff recipients
+      const recipients = env.notifyEmails;
+      const htmlBody = buildOrderNotificationHtml({
+        orderNumber: input.orderNumber,
+        customerName: input.customerName,
+        customerPhone: input.customerPhone,
+        grandTotal: input.grandTotal,
+        paymentMethod: input.paymentMethod,
+        items: input.items.map(i => ({ productName: i.productName, quantity: i.quantity, unitPrice: i.unitPrice })),
+        shippingAddress: input.shippingAddress as Record<string, string> | undefined,
       });
+
+      for (const recipient of recipients) {
+        await db.insert(emailQueue).values({
+          recipient,
+          subject: `🛍️ New Order: ${input.orderNumber} — ${input.customerName} — $${input.grandTotal}`,
+          body: `New order ${input.orderNumber} from ${input.customerName}\nPhone: ${input.customerPhone}\nTotal: $${input.grandTotal}\nPayment: ${input.paymentMethod}\n\nView: https://miniyo.store/#/admin`,
+          template: "order_notification",
+        });
+      }
+
+      // Also queue confirmation email to customer if email provided
+      if (input.customerEmail) {
+        await db.insert(emailQueue).values({
+          recipient: input.customerEmail,
+          subject: `✅ Your Miniyo order ${input.orderNumber} is confirmed!`,
+          body: `Hi ${input.customerName},\n\nThank you for your order! We've received order ${input.orderNumber} and will be in touch shortly.\n\nTotal: $${input.grandTotal}\nPayment: ${input.paymentMethod}\n\nIf you have any questions, reach us on WhatsApp or at admin@miniyo.store\n\nWith love,\nThe Miniyo Team 💛`,
+          template: "order_confirmation",
+        });
+      }
 
       return db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
     }),
@@ -312,21 +337,17 @@ const customerRouter = createRouter({
     .mutation(async ({ input }) => {
       const db = getDb();
 
-      // Check if customer with this email already exists
       if (input.email) {
         const existing = await db.select().from(customers).where(eq(customers.email, input.email)).limit(1);
-        if (existing[0]) {
-          return existing[0];
-        }
+        if (existing[0]) return existing[0];
       }
 
       const [result] = await db.insert(customers).values(input).$returningId();
 
-      // Queue welcome email
       if (input.email) {
         await db.insert(emailQueue).values({
           recipient: input.email,
-          subject: "Welcome to Miniyo!",
+          subject: "Welcome to Miniyo! 💛",
           body: `Hi ${input.name},\n\nWelcome to Miniyo! We're so excited to have you join our family of happy parents across Lebanon.\n\nShop our curated collection: https://miniyo.store\n\nWith love,\nThe Miniyo Team`,
           template: "welcome",
         });
@@ -506,7 +527,7 @@ const statsRouter = createRouter({
 // ── Email Queue ──
 const emailRouter = createRouter({
   queue: adminQuery.query(async () => {
-    return getDb().select().from(emailQueue).orderBy(desc(emailQueue.createdAt));
+    return getDb().select().from(emailQueue).orderBy(desc(emailQueue.createdAt)).limit(200);
   }),
 
   sendOrderNotification: publicQuery
@@ -519,25 +540,25 @@ const emailRouter = createRouter({
     }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      await db.insert(emailQueue).values({
-        recipient: "miniyo.store.lb@gmail.com",
-        subject: `New Order: ${input.orderNumber}`,
-        body: `A new order has been placed:\n\nOrder: ${input.orderNumber}\nCustomer: ${input.customerName}\nPhone: ${input.customerPhone}\nTotal: $${input.grandTotal}\nPayment: ${input.paymentMethod}`,
-        template: "order_notification",
-      });
+      const recipients = env.notifyEmails;
+      for (const recipient of recipients) {
+        await db.insert(emailQueue).values({
+          recipient,
+          subject: `🛍️ New Order: ${input.orderNumber}`,
+          body: `A new order has been placed:\n\nOrder: ${input.orderNumber}\nCustomer: ${input.customerName}\nPhone: ${input.customerPhone}\nTotal: $${input.grandTotal}\nPayment: ${input.paymentMethod}`,
+          template: "order_notification",
+        });
+      }
       return { success: true };
     }),
 
   sendWelcome: publicQuery
-    .input(z.object({
-      email: z.string(),
-      name: z.string(),
-    }))
+    .input(z.object({ email: z.string(), name: z.string() }))
     .mutation(async ({ input }) => {
       const db = getDb();
       await db.insert(emailQueue).values({
         recipient: input.email,
-        subject: "Welcome to Miniyo!",
+        subject: "Welcome to Miniyo! 💛",
         body: `Hi ${input.name},\n\nWelcome to Miniyo! We're so excited to have you join our family of happy parents across Lebanon.\n\nShop our curated collection: https://miniyo.store\n\nWith love,\nThe Miniyo Team`,
         template: "welcome",
       });
