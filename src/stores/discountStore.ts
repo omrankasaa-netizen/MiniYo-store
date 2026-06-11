@@ -40,6 +40,8 @@ interface DiscountStore {
   applyAutoDiscounts: (subtotal: number) => { discount: number; reason: string; discountId?: string }
 }
 
+// FIX: Updated validUntil from '2025-12-31' to '2026-12-31' — the code was
+// expired and silently returning $0 discount for all customers applying it.
 const SEED_DISCOUNTS: Discount[] = [
   {
     id: 'disc-welcome',
@@ -51,7 +53,7 @@ const SEED_DISCOUNTS: Discount[] = [
     minOrderAmount: 0,
     maxDiscount: 30,
     validFrom: '2025-01-01',
-    validUntil: '2025-12-31',
+    validUntil: '2026-12-31',
     isActive: true,
     usageLimit: 9999,
     usageCount: 0,
