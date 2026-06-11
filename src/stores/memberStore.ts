@@ -55,7 +55,7 @@ export interface MemberCustomer {
   freeShippingUsed: number
   freeShippingMonth: string
   firstOrderDiscountUsed: boolean
-  birthdayOfferUsed: string | null // YYYY-MM of when birthday offer was claimed
+  birthdayOfferUsed: string | null
   registeredAt: string
   referralCode: string
   referralCount: number
@@ -159,19 +159,16 @@ interface MemberStore {
   removePaymentMethod: (id: string) => void
   setDefaultPaymentMethod: (id: string) => void
 
-  // Children
   addChild: (child: Omit<Child, 'id'>) => void
   removeChild: (id: string) => void
   updateChild: (id: string, updates: Partial<Child>) => void
   getChildAge: (dateOfBirth: string) => number
   getAgeGroup: (ageInMonths: number) => string
 
-  // Birthday
   isBirthday: () => boolean
   claimBirthdayOffer: () => boolean
   getBirthdayOfferStatus: () => { isBirthday: boolean; claimed: boolean; canClaim: boolean }
 
-  // Recommendations
   getProductRecommendations: (products: any[]) => any[]
 
   getBenefits: () => MembershipBenefit
@@ -186,22 +183,18 @@ interface MemberStore {
 
   getOrders: () => CustomerOrder[]
 
-  // Password reset
   requestPasswordReset: (email: string) => { success: boolean; code: string } | null
   resetPassword: (email: string, code: string, newCode: string, newPassword: string) => boolean
 
-  // Referral
   getReferralCode: () => string
   getReferralUrl: () => string
   applyReferral: (code: string) => boolean
 
-  // Reviews
   addReview: (review: Omit<ProductReview, 'id' | 'createdAt'>) => void
   getProductReviews: (productId: string) => ProductReview[]
   getAverageRating: (productId: string) => number
   markHelpful: (reviewId: string) => void
 
-  // Abandoned cart
   markCartAbandoned: () => void
   recoverCart: () => void
   dismissAbandonedCart: () => void
@@ -224,7 +217,8 @@ function generateReferralCode(name: string): string {
   return `${prefix}${num}`
 }
 
-// Password storage - persisted via localStorage for reliability
+// Passwords stored in localStorage — plain text is acceptable for this
+// demo/MVP build. Migrate to Supabase Auth for production.
 function getPasswordStore(): Record<string, string> {
   try {
     const raw = localStorage.getItem('miniyo-passwords')
@@ -236,15 +230,13 @@ function setPasswordStore(store: Record<string, string>) {
   localStorage.setItem('miniyo-passwords', JSON.stringify(store))
 }
 
-// In-memory storage for reset codes
 const _resetCodes: Record<string, string> = {}
-// Referral tracking
 const _referralRewards: Record<string, number> = {}
 
-// Lazy import helper to avoid circular deps — cartStore imports nothing from memberStore
+// Clears the persisted cart directly from localStorage to avoid a circular
+// import between memberStore and cartStore.
 function clearCartStore() {
   try {
-    // Dynamically clear persisted cart from localStorage directly
     localStorage.removeItem('miniyo-cart')
   } catch { /* ignore */ }
 }
@@ -266,7 +258,6 @@ export const useMemberStore = create<MemberStore>()(
         const existing = get().customer
         if (existing && existing.email === data.email) return false
 
-        // Check referral
         let referralBonus = 0
         const allStores = Object.keys(localStorage)
           .filter(k => k.startsWith('miniyo-member'))
@@ -368,14 +359,19 @@ export const useMemberStore = create<MemberStore>()(
         return false
       },
 
-      // FIX: Full state wipe on logout — clears customer, all session data,
-      // the persisted localStorage key, and the cart to prevent data leakage
-      // between sessions. Previously only set isAuthenticated: false which left
-      // the customer object intact, causing membership benefits to persist.
+      // SECURITY FIX: Full state wipe on logout.
+      // Previously only set isAuthenticated: false which left the customer
+      // object in both memory and the persisted localStorage snapshot.
+      // The Zustand persist middleware rehydrated it on next page load,
+      // so calculateDiscount/calculateShipping still used the old tier data,
+      // giving unauthenticated visitors membership discounts and free shipping.
+      //
+      // Fix: reset every field to its initial value AND remove the persisted
+      // snapshot key so the next page load starts completely clean.
       logout: () => {
-        // Clear the cart from localStorage directly (avoids circular import)
+        // Clear cart so a previous customer's items don't leak to the next session.
         clearCartStore()
-        // Reset all member state to defaults
+        // Wipe all member state from memory.
         set({
           customer: null,
           isAuthenticated: false,
@@ -387,7 +383,7 @@ export const useMemberStore = create<MemberStore>()(
           reviews: [],
           cartAbandonedAt: null,
         })
-        // Remove the persisted Zustand snapshot so next page load starts clean
+        // Remove persisted Zustand snapshot — prevents rehydration on next load.
         localStorage.removeItem('miniyo-member')
       },
 
@@ -397,13 +393,11 @@ export const useMemberStore = create<MemberStore>()(
         set({ customer: { ...customer, ...updates } })
       },
 
-      // Sync profile from unified auth system — called after login/registration
       syncProfile: (user) => {
         if (!user.email) return
         const existing = get().customer
 
         if (existing && existing.email === user.email) {
-          // Update existing profile
           set({
             customer: {
               ...existing,
@@ -413,7 +407,6 @@ export const useMemberStore = create<MemberStore>()(
             isAuthenticated: true,
           })
         } else {
-          // Create new profile from auth user
           set({
             customer: {
               id: `member-${Date.now()}`,
@@ -510,9 +503,9 @@ export const useMemberStore = create<MemberStore>()(
         }
       },
 
-      // FIX: Guard against unauthenticated access — previously only checked
-      // customer existence, allowing persisted customer data to grant discounts
-      // after logout. Now requires isAuthenticated: true as well.
+      // SECURITY FIX: Added isAuthenticated guard.
+      // Previously only checked customer existence, so a logged-out user whose
+      // customer object was still in persisted state would receive discounts.
       calculateDiscount: (subtotal) => {
         const state = get()
         if (!state.customer || !state.isAuthenticated) return { discount: 0, reason: '' }
@@ -527,7 +520,7 @@ export const useMemberStore = create<MemberStore>()(
         return { discount: 0, reason: '' }
       },
 
-      // FIX: Same isAuthenticated guard applied to shipping calculation.
+      // SECURITY FIX: Added isAuthenticated guard (same reason as calculateDiscount).
       calculateShipping: (subtotal) => {
         if (subtotal >= 50) return { fee: 0, reason: 'Free shipping (over $50)' }
         const state = get()
@@ -544,7 +537,7 @@ export const useMemberStore = create<MemberStore>()(
         return { fee: null, reason: '' }
       },
 
-      // FIX: Same isAuthenticated guard applied to free shipping eligibility check.
+      // SECURITY FIX: Added isAuthenticated guard.
       canUseFreeShipping: () => {
         const state = get()
         if (!state.customer || !state.isAuthenticated) return false
@@ -593,7 +586,6 @@ export const useMemberStore = create<MemberStore>()(
 
       getOrders: () => get().orders,
 
-      // Password reset
       requestPasswordReset: (email) => {
         const customer = get().customer
         if (!customer || customer.email !== email) return null
@@ -611,7 +603,6 @@ export const useMemberStore = create<MemberStore>()(
         return true
       },
 
-      // Referral
       getReferralCode: () => {
         return get().customer?.referralCode || ''
       },
@@ -632,7 +623,6 @@ export const useMemberStore = create<MemberStore>()(
         return true
       },
 
-      // Reviews
       addReview: (review) => {
         const newReview: ProductReview = {
           ...review,
@@ -660,7 +650,6 @@ export const useMemberStore = create<MemberStore>()(
         })
       },
 
-      // Abandoned cart
       markCartAbandoned: () => {
         set({ cartAbandonedAt: new Date().toISOString() })
       },
@@ -673,7 +662,6 @@ export const useMemberStore = create<MemberStore>()(
         set({ cartAbandonedAt: null })
       },
 
-      // Children CRUD
       addChild: (child) => {
         const newChild: Child = { ...child, id: `child-${Date.now()}` }
         set({ children: [...get().children, newChild] })
@@ -705,7 +693,6 @@ export const useMemberStore = create<MemberStore>()(
         return '4Y+'
       },
 
-      // Birthday
       isBirthday: () => {
         const customer = get().customer
         if (!customer?.dateOfBirth) return false
@@ -738,7 +725,6 @@ export const useMemberStore = create<MemberStore>()(
         return { isBirthday: isBday, claimed, canClaim: isBday && !claimed }
       },
 
-      // Age-based product recommendations
       getProductRecommendations: (products) => {
         const children = get().children
         if (children.length === 0) return []

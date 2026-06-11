@@ -33,15 +33,15 @@ interface DiscountStore {
   toggleActive: (id: string) => void
   incrementUsage: (id: string) => void
 
-  // Validation
   getActiveDiscounts: () => Discount[]
   validateCode: (code: string, subtotal: number) => Discount | null
   calculateDiscount: (code: string, subtotal: number) => { discount: number; reason: string; discountId?: string }
   applyAutoDiscounts: (subtotal: number) => { discount: number; reason: string; discountId?: string }
 }
 
-// FIX: Updated validUntil from '2025-12-31' to '2026-12-31' — the code was
-// expired and silently returning $0 discount for all customers applying it.
+// FIX: validUntil extended to 2026-12-31. The original value was 2025-12-31
+// which meant the code was expired as of 2026, silently returning $0 for
+// any customer who applied it at checkout.
 const SEED_DISCOUNTS: Discount[] = [
   {
     id: 'disc-welcome',

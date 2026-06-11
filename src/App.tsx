@@ -49,8 +49,10 @@ function PageTransition({ children }: { children: React.ReactNode }) {
   )
 }
 
-// FIX: ProtectedRoute — redirects unauthenticated users to /login.
-// Wraps /checkout and /account so they cannot be accessed without a valid session.
+// SECURITY FIX: ProtectedRoute — any attempt to access /checkout or /account
+// while not authenticated redirects to /login. Previously these routes had no
+// guard so unauthenticated users could browse checkout and receive membership
+// pricing from the persisted store state.
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useMemberStore(s => s.isAuthenticated)
   if (!isAuthenticated) {
@@ -59,7 +61,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-// FIX: AdminRoute — requires both isAuthenticated and a known admin email.
+// SECURITY FIX: AdminRoute — /admin was completely unguarded, allowing
+// anyone who knew the URL to access the admin panel. Now requires both
+// isAuthenticated and a whitelisted admin email.
 const ADMIN_EMAILS = ['admin@miniyo.store']
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, customer } = useMemberStore(s => ({
@@ -104,7 +108,7 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
         <Route path="/login" element={<LoginPage locale={locale} />} />
         <Route path="/register" element={<RegisterPage locale={locale} />} />
 
-        {/* FIX: Admin Panel — now guarded by AdminRoute */}
+        {/* Admin Panel — guarded by AdminRoute */}
         <Route
           path="/admin"
           element={
@@ -120,7 +124,7 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
         <Route path="/product/:handle" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><ProductPage locale={locale} /></MainLayout>} />
         <Route path="/cart" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><CartPage locale={locale} /></MainLayout>} />
 
-        {/* FIX: /checkout — now wrapped in ProtectedRoute */}
+        {/* Checkout — requires authentication */}
         <Route
           path="/checkout"
           element={
@@ -141,7 +145,7 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
         <Route path="/terms" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><TermsPage /></MainLayout>} />
         <Route path="/wishlist" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><WishlistPage locale={locale} /></MainLayout>} />
 
-        {/* FIX: /account — now wrapped in ProtectedRoute */}
+        {/* Member area — requires authentication */}
         <Route
           path="/account"
           element={
@@ -153,7 +157,7 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
           }
         />
 
-        {/* FIX: 404 catch-all — shows a clean not-found state instead of blank page */}
+        {/* 404 catch-all — prevents blank white page on broken ad links */}
         <Route
           path="*"
           element={
