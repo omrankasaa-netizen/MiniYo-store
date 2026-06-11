@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   Store, CreditCard, Truck, Tag, Users, ClipboardList, Save, Check,
-  Shield, DollarSign, Package, Lock, X, UserPlus, Trash2, Image
+  Shield, DollarSign, Package, Lock, X, UserPlus, Trash2, Image, KeyRound, Eye, EyeOff
 } from 'lucide-react'
 import { useAdminStore } from '@/stores/adminStore'
 
@@ -20,7 +20,7 @@ const initialStaff: StaffMember[] = [
   { id: 's3', name: 'Rana S.', email: 'rana@miniyo.store', role: 'staff', status: 'active', lastLogin: '2025-06-15' },
 ]
 
-type SubSection = 'general' | 'payments' | 'shipping' | 'discounts' | 'staff' | 'audit'
+type SubSection = 'general' | 'payments' | 'shipping' | 'discounts' | 'staff' | 'audit' | 'security'
 
 const navItems: { key: SubSection; label: string; icon: typeof Store }[] = [
   { key: 'general', label: 'General', icon: Store },
@@ -29,6 +29,7 @@ const navItems: { key: SubSection; label: string; icon: typeof Store }[] = [
   { key: 'discounts', label: 'Discounts', icon: Tag },
   { key: 'staff', label: 'Staff & Roles', icon: Users },
   { key: 'audit', label: 'Audit Log', icon: ClipboardList },
+  { key: 'security', label: 'Security', icon: Lock },
 ]
 
 export function SettingsModule({ section }: { section?: string }) {
@@ -41,6 +42,12 @@ export function SettingsModule({ section }: { section?: string }) {
   const [staff, setStaff] = useState<StaffMember[]>(initialStaff)
   const [showStaffForm, setShowStaffForm] = useState(false)
   const [staffForm, setStaffForm] = useState({ name: '', email: '', role: 'staff' as const })
+
+  // Security / change-password state
+  const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' })
+  const [pwShow, setPwShow] = useState({ current: false, next: false, confirm: false })
+  const [pwStatus, setPwStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const [pwLoading, setPwLoading] = useState(false)
 
   const handleSave = () => {
     updateSettings(form)
@@ -65,6 +72,42 @@ export function SettingsModule({ section }: { section?: string }) {
 
   const removeStaff = (id: string) => {
     setStaff(prev => prev.filter(s => s.id !== id))
+  }
+
+  const handleChangePassword = async () => {
+    setPwStatus(null)
+    if (!pwForm.current || !pwForm.next || !pwForm.confirm) {
+      setPwStatus({ type: 'error', msg: 'All fields are required' })
+      return
+    }
+    if (pwForm.next.length < 8) {
+      setPwStatus({ type: 'error', msg: 'New password must be at least 8 characters' })
+      return
+    }
+    if (pwForm.next !== pwForm.confirm) {
+      setPwStatus({ type: 'error', msg: 'New passwords do not match' })
+      return
+    }
+    setPwLoading(true)
+    try {
+      const res = await fetch('/api/admin/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ currentPassword: pwForm.current, newPassword: pwForm.next }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setPwStatus({ type: 'success', msg: 'Password changed successfully' })
+        setPwForm({ current: '', next: '', confirm: '' })
+      } else {
+        setPwStatus({ type: 'error', msg: data.error || 'Failed to change password' })
+      }
+    } catch {
+      setPwStatus({ type: 'error', msg: 'Network error — please try again' })
+    } finally {
+      setPwLoading(false)
+    }
   }
 
   const renderContent = () => {
@@ -448,6 +491,125 @@ export function SettingsModule({ section }: { section?: string }) {
                 </div>
               </div>
             )}
+          </div>
+        )
+
+      case 'security':
+        return (
+          <div className="space-y-6">
+            <div>
+              <h3 className="font-semibold text-[#2D5A4C] text-sm flex items-center gap-2">
+                <KeyRound size={15} /> Change Admin Password
+              </h3>
+              <p className="text-xs text-[#A8A396] mt-1">Updates the password for your admin account immediately.</p>
+            </div>
+
+            <div className="max-w-sm space-y-4">
+              {/* Current password */}
+              <div>
+                <label className="text-xs text-[#8B8578] mb-1 block">Current Password</label>
+                <div className="relative">
+                  <input
+                    type={pwShow.current ? 'text' : 'password'}
+                    value={pwForm.current}
+                    onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))}
+                    placeholder="Enter current password"
+                    className="w-full h-10 border border-[#D4CFC6] rounded-lg px-3 pr-10 text-sm bg-white outline-none focus:border-[#8FAE7B]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPwShow(p => ({ ...p, current: !p.current }))}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#A8A396] hover:text-[#5C6B60]"
+                  >
+                    {pwShow.current ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* New password */}
+              <div>
+                <label className="text-xs text-[#8B8578] mb-1 block">New Password</label>
+                <div className="relative">
+                  <input
+                    type={pwShow.next ? 'text' : 'password'}
+                    value={pwForm.next}
+                    onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))}
+                    placeholder="Min. 8 characters"
+                    className="w-full h-10 border border-[#D4CFC6] rounded-lg px-3 pr-10 text-sm bg-white outline-none focus:border-[#8FAE7B]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPwShow(p => ({ ...p, next: !p.next }))}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#A8A396] hover:text-[#5C6B60]"
+                  >
+                    {pwShow.next ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                {/* Strength hint */}
+                {pwForm.next.length > 0 && (
+                  <div className="mt-1.5 flex gap-1">
+                    {[1,2,3,4].map(i => (
+                      <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${
+                        pwForm.next.length >= i * 3
+                          ? pwForm.next.length >= 12 ? 'bg-emerald-400'
+                            : pwForm.next.length >= 8 ? 'bg-yellow-400'
+                            : 'bg-red-400'
+                          : 'bg-[#E8E4DB]'
+                      }`} />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Confirm password */}
+              <div>
+                <label className="text-xs text-[#8B8578] mb-1 block">Confirm New Password</label>
+                <div className="relative">
+                  <input
+                    type={pwShow.confirm ? 'text' : 'password'}
+                    value={pwForm.confirm}
+                    onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))}
+                    placeholder="Repeat new password"
+                    className={`w-full h-10 border rounded-lg px-3 pr-10 text-sm bg-white outline-none focus:border-[#8FAE7B] ${
+                      pwForm.confirm && pwForm.confirm !== pwForm.next
+                        ? 'border-red-300'
+                        : 'border-[#D4CFC6]'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPwShow(p => ({ ...p, confirm: !p.confirm }))}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#A8A396] hover:text-[#5C6B60]"
+                  >
+                    {pwShow.confirm ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                {pwForm.confirm && pwForm.confirm !== pwForm.next && (
+                  <p className="text-xs text-red-400 mt-1">Passwords do not match</p>
+                )}
+              </div>
+
+              {/* Status message */}
+              {pwStatus && (
+                <div className={`text-xs px-3 py-2.5 rounded-lg flex items-center gap-2 ${
+                  pwStatus.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-red-50 text-red-600 border border-red-200'
+                }`}>
+                  {pwStatus.type === 'success' ? <Check size={13} /> : <X size={13} />}
+                  {pwStatus.msg}
+                </div>
+              )}
+
+              <button
+                onClick={handleChangePassword}
+                disabled={pwLoading}
+                className="h-10 px-5 bg-[#2D5A4C] text-white text-sm rounded-lg hover:bg-[#1e4539] transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <KeyRound size={14} />
+                {pwLoading ? 'Saving…' : 'Change Password'}
+              </button>
+            </div>
           </div>
         )
     }
