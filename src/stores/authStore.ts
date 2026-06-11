@@ -32,8 +32,23 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   setLoading: (loading) => set({ isLoading: loading }),
 
+  /**
+   * FIX: logout now also wipes memberStore + cart.
+   * Previously authStore and memberStore were independent — logging out of one
+   * left the other intact, so membership discounts persisted for anonymous visitors.
+   */
   logout: () => {
     set({ user: null, isAuthenticated: false, isAdmin: false })
+    // Lazy import to avoid circular dependency at module load time
+    import('@/stores/memberStore').then(({ useMemberStore }) => {
+      useMemberStore.getState().logout()
+    }).catch(() => {
+      // Fallback: wipe localStorage keys directly if import fails
+      try {
+        localStorage.removeItem('miniyo-member')
+        localStorage.removeItem('miniyo-cart')
+      } catch { /* ignore */ }
+    })
   },
 
   setLocale: (locale) => {

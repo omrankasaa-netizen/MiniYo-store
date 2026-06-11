@@ -14,12 +14,13 @@ import { CmsModule } from '@/components/admin/CmsModule'
 import { SettingsModule } from '@/components/admin/SettingsModule'
 import { CsvImportModule } from '@/components/admin/CsvImportModule'
 import { DiscountsModule } from '@/components/admin/DiscountsModule'
+import { MembershipsModule } from '@/components/admin/MembershipsModule'
 
 export type AdminView =
   | 'dashboard' | 'orders' | 'products' | 'inventory'
   | 'customers' | 'media' | 'cms' | 'payments'
-  | 'shipping' | 'discounts' | 'settings' | 'staff'
-  | 'reports' | 'audit' | 'import'
+  | 'shipping' | 'discounts' | 'memberships' | 'settings'
+  | 'staff' | 'reports' | 'audit' | 'import'
 
 export function AdminPage() {
   const navigate = useNavigate()
@@ -30,13 +31,11 @@ export function AdminPage() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [syncNotification, setSyncNotification] = useState<string | null>(null)
 
-  // Auto-import pending orders/stock from storefront on mount
   useEffect(() => {
     if (!isAdmin) {
       navigate(isAuthenticated ? '/' : '/login')
       return
     }
-    // Try importing any pending storefront data
     const result = importPending()
     if (result.ordersImported > 0) {
       setSyncNotification(`Imported ${result.ordersImported} new order${result.ordersImported > 1 ? 's' : ''} from storefront`)
@@ -49,7 +48,6 @@ export function AdminPage() {
     }
   }, [isAdmin, isAuthenticated, navigate, importPending])
 
-  // Also listen for storage events (other tabs)
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'miniyo-sync') {
@@ -76,12 +74,13 @@ export function AdminPage() {
       case 'cms': return <CmsModule />
       case 'payments': return <OrdersModule filterPayment />
       case 'shipping': return <SettingsModule section="shipping" />
+      case 'discounts': return <DiscountsModule />
+      case 'memberships': return <MembershipsModule />
       case 'settings': return <SettingsModule />
       case 'staff': return <SettingsModule section="staff" />
       case 'reports': return <DashboardModule onNavigate={setView} reports />
       case 'audit': return <SettingsModule section="audit" />
       case 'import': return <CsvImportModule />
-      case 'discounts': return <DiscountsModule />
       default: return <DashboardModule onNavigate={setView} />
     }
   }
@@ -98,7 +97,6 @@ export function AdminPage() {
       />
 
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Sync Notification Toast */}
         {syncNotification && (
           <div className="bg-sage-green/10 border-b border-sage-green/30 px-4 py-2.5 flex items-center justify-between shrink-0">
             <span className="text-sm text-sage-green font-medium flex items-center gap-2">

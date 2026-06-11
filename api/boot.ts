@@ -1,4 +1,3 @@
-$ mkdir -p output && cat > output/boot.ts <<'EOF'
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { HttpBindings } from "@hono/node-server";
@@ -10,6 +9,7 @@ import { createOAuthCallbackHandler } from "./kimi/auth";
 import { Paths } from "@contracts/constants";
 import { handleAdminLogin } from "./admin-login-handler";
 import { setupAdmin } from "./setup-admin";
+import { startEmailWorker } from "./email-worker";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
@@ -117,6 +117,7 @@ if (env.isProduction) {
   const port = parseInt(process.env.PORT || "3000");
   serve({ fetch: app.fetch, port }, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    // Start email worker after server is listening
+    startEmailWorker();
   });
 }
-EOF

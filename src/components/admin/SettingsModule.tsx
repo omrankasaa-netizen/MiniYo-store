@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import {
   Store, CreditCard, Truck, Tag, Users, ClipboardList, Save, Check,
-  Shield, DollarSign, Package, Lock, X, UserPlus, Trash2, Image
+  Shield, DollarSign, Package, Lock, X, UserPlus, Trash2, Image, Settings2
 } from 'lucide-react'
 import { useAdminStore } from '@/stores/adminStore'
+import { ConfigModule } from './ConfigModule'
 
 interface StaffMember {
   id: string
@@ -15,12 +16,12 @@ interface StaffMember {
 }
 
 const initialStaff: StaffMember[] = [
-  { id: 's1', name: 'Omran', email: 'miniyo.store.lb@gmail.com', role: 'super_admin', status: 'active', lastLogin: '2025-06-17' },
-  { id: 's2', name: 'Ahmad K.', email: 'ahmad@miniyo.store', role: 'admin', status: 'active', lastLogin: '2025-06-16' },
-  { id: 's3', name: 'Rana S.', email: 'rana@miniyo.store', role: 'staff', status: 'active', lastLogin: '2025-06-15' },
+  { id: 's1', name: 'Omran', email: 'Management@miniyo.store', role: 'super_admin', status: 'active', lastLogin: new Date().toISOString().slice(0, 10) },
+  { id: 's2', name: 'Ahmad K.', email: 'admin@miniyo.store', role: 'admin', status: 'active', lastLogin: new Date().toISOString().slice(0, 10) },
+  { id: 's3', name: 'Marketing', email: 'marketing@miniyo.store', role: 'staff', status: 'active', lastLogin: '-' },
 ]
 
-type SubSection = 'general' | 'payments' | 'shipping' | 'discounts' | 'staff' | 'audit'
+type SubSection = 'general' | 'payments' | 'shipping' | 'discounts' | 'staff' | 'audit' | 'configuration'
 
 const navItems: { key: SubSection; label: string; icon: typeof Store }[] = [
   { key: 'general', label: 'General', icon: Store },
@@ -29,6 +30,7 @@ const navItems: { key: SubSection; label: string; icon: typeof Store }[] = [
   { key: 'discounts', label: 'Discounts', icon: Tag },
   { key: 'staff', label: 'Staff & Roles', icon: Users },
   { key: 'audit', label: 'Audit Log', icon: ClipboardList },
+  { key: 'configuration', label: 'Configuration', icon: Settings2 },
 ]
 
 export function SettingsModule({ section }: { section?: string }) {
@@ -450,6 +452,9 @@ export function SettingsModule({ section }: { section?: string }) {
             )}
           </div>
         )
+
+      case 'configuration':
+        return <ConfigModule />
     }
   }
 
@@ -481,7 +486,7 @@ export function SettingsModule({ section }: { section?: string }) {
         {renderContent()}
       </div>
 
-      {/* Save Button (for settings tabs) */}
+      {/* Save Button (for settings tabs only — not config or audit) */}
       {(activeTab === 'general' || activeTab === 'payments' || activeTab === 'shipping') && (
         <div className="flex items-center gap-3">
           <button

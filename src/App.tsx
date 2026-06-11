@@ -25,7 +25,7 @@ import { AdminPage } from '@/pages/AdminPage'
 import { WishlistPage } from '@/pages/WishlistPage'
 import { PrivacyPage } from '@/pages/PrivacyPage'
 import { TermsPage } from '@/pages/TermsPage'
-import { useMemberStore } from '@/stores/memberStore'
+import { useAuth } from '@/hooks/useAuth'
 import type { Locale } from '@/types'
 
 function ScrollToTop() {
@@ -49,25 +49,23 @@ function PageTransition({ children }: { children: React.ReactNode }) {
   )
 }
 
-// FIX: ProtectedRoute — redirects unauthenticated users to /login.
-// Wraps /checkout and /account so they cannot be accessed without a valid session.
+// ProtectedRoute — redirects unauthenticated users to /login.
+// Sources isAuthenticated from useAuth() (JWT cookie session) — NOT from
+// memberStore, which is a UI-layer cache and can be stale after logout.
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const isAuthenticated = useMemberStore(s => s.isAuthenticated)
+  const { isAuthenticated } = useAuth()
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
   }
   return <>{children}</>
 }
 
-// FIX: AdminRoute — requires both isAuthenticated and a known admin email.
-const ADMIN_EMAILS = ['admin@miniyo.store']
+// AdminRoute — requires both isAuthenticated AND an admin/staff role from the
+// server-side JWT. Previously used a hardcoded email list from memberStore;
+// now uses the role field returned by localAuthRouter which comes from the DB.
 function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, customer } = useMemberStore(s => ({
-    isAuthenticated: s.isAuthenticated,
-    customer: s.customer,
-  }))
-  const isAdmin = isAuthenticated && customer?.email != null && ADMIN_EMAILS.includes(customer.email)
-  if (!isAdmin) {
+  const { isAuthenticated, isAdmin, isStaff } = useAuth()
+  if (!isAuthenticated || (!isAdmin && !isStaff)) {
     return <Navigate to="/login" replace />
   }
   return <>{children}</>
@@ -104,7 +102,7 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
         <Route path="/login" element={<LoginPage locale={locale} />} />
         <Route path="/register" element={<RegisterPage locale={locale} />} />
 
-        {/* FIX: Admin Panel — now guarded by AdminRoute */}
+        {/* Admin Panel — guarded by role from JWT session */}
         <Route
           path="/admin"
           element={
@@ -120,7 +118,7 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
         <Route path="/product/:handle" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><ProductPage locale={locale} /></MainLayout>} />
         <Route path="/cart" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><CartPage locale={locale} /></MainLayout>} />
 
-        {/* FIX: /checkout — now wrapped in ProtectedRoute */}
+        {/* /checkout — protected: requires valid login session */}
         <Route
           path="/checkout"
           element={
@@ -141,7 +139,7 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
         <Route path="/terms" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><TermsPage /></MainLayout>} />
         <Route path="/wishlist" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><WishlistPage locale={locale} /></MainLayout>} />
 
-        {/* FIX: /account — now wrapped in ProtectedRoute */}
+        {/* /account — protected: requires valid login session */}
         <Route
           path="/account"
           element={
@@ -153,7 +151,7 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
           }
         />
 
-        {/* FIX: 404 catch-all — shows a clean not-found state instead of blank page */}
+        {/* 404 catch-all */}
         <Route
           path="*"
           element={

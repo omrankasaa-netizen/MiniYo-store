@@ -3,7 +3,7 @@ import {
   LayoutDashboard, ShoppingCart, Package, ClipboardList,
   Users, Image, FileText, CreditCard, Truck, Tag, Settings,
   UserCog, BarChart3, ShieldCheck, PanelLeftClose, PanelLeft,
-  X, Download, Percent,
+  X, Download, Percent, Crown,
 } from 'lucide-react'
 import { useAdminStore } from '@/stores/adminStore'
 import type { AdminView } from '@/pages/AdminPage'
@@ -41,6 +41,7 @@ const navGroups = [
       { key: 'payments' as AdminView, label: 'Payments', icon: CreditCard },
       { key: 'shipping' as AdminView, label: 'Shipping', icon: Truck },
       { key: 'discounts' as AdminView, label: 'Discounts', icon: Percent },
+      { key: 'memberships' as AdminView, label: 'Memberships', icon: Crown },
       { key: 'import' as AdminView, label: 'Import CSV', icon: Download },
     ],
   },

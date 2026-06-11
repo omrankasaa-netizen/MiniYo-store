@@ -1,13 +1,10 @@
-import { authRouter } from "./auth-router";
-import { localAuthRouter } from "./local-auth-router";
+import { createRouter } from "./middleware";
 import { miniyoRouter } from "./miniyo-router";
-import { createRouter, publicQuery } from "./middleware";
+import { settingsAdminRouter } from "./settings-router";
 
 export const appRouter = createRouter({
-  ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
-  auth: authRouter,
-  localAuth: localAuthRouter,
   miniyo: miniyoRouter,
+  settingsAdmin: settingsAdminRouter,
 });
 
 export type AppRouter = typeof appRouter;

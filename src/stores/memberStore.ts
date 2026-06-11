@@ -241,10 +241,9 @@ const _resetCodes: Record<string, string> = {}
 // Referral tracking
 const _referralRewards: Record<string, number> = {}
 
-// Lazy import helper to avoid circular deps — cartStore imports nothing from memberStore
+// Clears the persisted cart from localStorage directly (avoids circular import)
 function clearCartStore() {
   try {
-    // Dynamically clear persisted cart from localStorage directly
     localStorage.removeItem('miniyo-cart')
   } catch { /* ignore */ }
 }
@@ -368,14 +367,16 @@ export const useMemberStore = create<MemberStore>()(
         return false
       },
 
-      // FIX: Full state wipe on logout — clears customer, all session data,
-      // the persisted localStorage key, and the cart to prevent data leakage
-      // between sessions. Previously only set isAuthenticated: false which left
-      // the customer object intact, causing membership benefits to persist.
+      // FIX: Full state wipe on logout — previously only set isAuthenticated: false,
+      // leaving the customer object intact in memory AND in the persisted
+      // localStorage snapshot. The Zustand persist middleware would rehydrate that
+      // snapshot on next page load, silently granting membership benefits to any
+      // visitor. This version:
+      //   1. Resets every field to its default empty value
+      //   2. Removes the 'miniyo-cart' key so the previous cart doesn't leak
+      //   3. Removes 'miniyo-member' so the next cold load starts truly clean
       logout: () => {
-        // Clear the cart from localStorage directly (avoids circular import)
         clearCartStore()
-        // Reset all member state to defaults
         set({
           customer: null,
           isAuthenticated: false,
@@ -387,7 +388,6 @@ export const useMemberStore = create<MemberStore>()(
           reviews: [],
           cartAbandonedAt: null,
         })
-        // Remove the persisted Zustand snapshot so next page load starts clean
         localStorage.removeItem('miniyo-member')
       },
 
@@ -397,13 +397,11 @@ export const useMemberStore = create<MemberStore>()(
         set({ customer: { ...customer, ...updates } })
       },
 
-      // Sync profile from unified auth system — called after login/registration
       syncProfile: (user) => {
         if (!user.email) return
         const existing = get().customer
 
         if (existing && existing.email === user.email) {
-          // Update existing profile
           set({
             customer: {
               ...existing,
@@ -413,7 +411,6 @@ export const useMemberStore = create<MemberStore>()(
             isAuthenticated: true,
           })
         } else {
-          // Create new profile from auth user
           set({
             customer: {
               id: `member-${Date.now()}`,
@@ -510,9 +507,11 @@ export const useMemberStore = create<MemberStore>()(
         }
       },
 
-      // FIX: Guard against unauthenticated access — previously only checked
-      // customer existence, allowing persisted customer data to grant discounts
-      // after logout. Now requires isAuthenticated: true as well.
+      // FIX: Guard on isAuthenticated in addition to customer existence.
+      // Previously, a stale persisted customer with isAuthenticated: false
+      // (left behind by the old broken logout) could still pass the
+      // `if (!customer)` check and receive discounts. The dual guard closes
+      // that gap — both the customer object AND an active session are required.
       calculateDiscount: (subtotal) => {
         const state = get()
         if (!state.customer || !state.isAuthenticated) return { discount: 0, reason: '' }
@@ -527,7 +526,7 @@ export const useMemberStore = create<MemberStore>()(
         return { discount: 0, reason: '' }
       },
 
-      // FIX: Same isAuthenticated guard applied to shipping calculation.
+      // FIX: Same isAuthenticated guard applied to shipping.
       calculateShipping: (subtotal) => {
         if (subtotal >= 50) return { fee: 0, reason: 'Free shipping (over $50)' }
         const state = get()
@@ -544,7 +543,7 @@ export const useMemberStore = create<MemberStore>()(
         return { fee: null, reason: '' }
       },
 
-      // FIX: Same isAuthenticated guard applied to free shipping eligibility check.
+      // FIX: Same isAuthenticated guard applied to free-shipping eligibility.
       canUseFreeShipping: () => {
         const state = get()
         if (!state.customer || !state.isAuthenticated) return false
@@ -593,7 +592,6 @@ export const useMemberStore = create<MemberStore>()(
 
       getOrders: () => get().orders,
 
-      // Password reset
       requestPasswordReset: (email) => {
         const customer = get().customer
         if (!customer || customer.email !== email) return null
@@ -611,7 +609,6 @@ export const useMemberStore = create<MemberStore>()(
         return true
       },
 
-      // Referral
       getReferralCode: () => {
         return get().customer?.referralCode || ''
       },
@@ -632,7 +629,6 @@ export const useMemberStore = create<MemberStore>()(
         return true
       },
 
-      // Reviews
       addReview: (review) => {
         const newReview: ProductReview = {
           ...review,
@@ -660,7 +656,6 @@ export const useMemberStore = create<MemberStore>()(
         })
       },
 
-      // Abandoned cart
       markCartAbandoned: () => {
         set({ cartAbandonedAt: new Date().toISOString() })
       },
@@ -673,7 +668,6 @@ export const useMemberStore = create<MemberStore>()(
         set({ cartAbandonedAt: null })
       },
 
-      // Children CRUD
       addChild: (child) => {
         const newChild: Child = { ...child, id: `child-${Date.now()}` }
         set({ children: [...get().children, newChild] })
@@ -705,7 +699,6 @@ export const useMemberStore = create<MemberStore>()(
         return '4Y+'
       },
 
-      // Birthday
       isBirthday: () => {
         const customer = get().customer
         if (!customer?.dateOfBirth) return false
@@ -738,7 +731,6 @@ export const useMemberStore = create<MemberStore>()(
         return { isBirthday: isBday, claimed, canClaim: isBday && !claimed }
       },
 
-      // Age-based product recommendations
       getProductRecommendations: (products) => {
         const children = get().children
         if (children.length === 0) return []

@@ -20,6 +20,13 @@ interface CartStore {
   checkout: () => { orderNumber: string; items: CartItem[]; subtotal: number } | null
 }
 
+function computeTotals(items: CartItem[]) {
+  return {
+    totalItems: items.reduce((sum, i) => sum + i.quantity, 0),
+    subtotal: items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+  }
+}
+
 export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
@@ -57,11 +64,7 @@ export const useCartStore = create<CartStore>()(
         } else {
           newItems = [...items, effectiveItem]
         }
-        set({
-          items: newItems,
-          totalItems: newItems.reduce((sum, i) => sum + i.quantity, 0),
-          subtotal: newItems.reduce((sum, i) => sum + i.price * i.quantity, 0),
-        })
+        set({ items: newItems, ...computeTotals(newItems) })
         return true
       },
 
@@ -69,11 +72,7 @@ export const useCartStore = create<CartStore>()(
         const items = get().items.filter(
           (i) => !(i.productId === productId && i.variantId === variantId)
         )
-        set({
-          items,
-          totalItems: items.reduce((sum, i) => sum + i.quantity, 0),
-          subtotal: items.reduce((sum, i) => sum + i.price * i.quantity, 0),
-        })
+        set({ items, ...computeTotals(items) })
       },
 
       updateQuantity: (productId, variantId, quantity) => {
@@ -84,11 +83,7 @@ export const useCartStore = create<CartStore>()(
         const items = get().items.map((i) =>
           i.productId === productId && i.variantId === variantId ? { ...i, quantity } : i
         )
-        set({
-          items,
-          totalItems: items.reduce((sum, i) => sum + i.quantity, 0),
-          subtotal: items.reduce((sum, i) => sum + i.price * i.quantity, 0),
-        })
+        set({ items, ...computeTotals(items) })
         return true
       },
 
@@ -112,6 +107,17 @@ export const useCartStore = create<CartStore>()(
     {
       name: 'miniyo-cart',
       partialize: (state) => ({ items: state.items }),
+      // FIX: Rehydrate derived fields from persisted items on page load.
+      // Previously totalItems and subtotal were initialised to 0 and only
+      // updated on mutations, so the cart badge showed 0 after a page reload
+      // even when items were already in the cart.
+      onRehydrateStorage: () => (state) => {
+        if (state && state.items.length > 0) {
+          const totals = computeTotals(state.items)
+          state.totalItems = totals.totalItems
+          state.subtotal = totals.subtotal
+        }
+      },
     }
   )
 )
