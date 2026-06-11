@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
 import { useAuth } from '@/hooks/useAuth'
 import { useAdminStore } from '@/stores/adminStore'
@@ -14,29 +14,30 @@ import { CmsModule } from '@/components/admin/CmsModule'
 import { SettingsModule } from '@/components/admin/SettingsModule'
 import { CsvImportModule } from '@/components/admin/CsvImportModule'
 import { DiscountsModule } from '@/components/admin/DiscountsModule'
+import { NotificationsModule } from '@/components/admin/NotificationsModule'
 
 export type AdminView =
-  | 'dashboard' | 'orders' | 'products' | 'inventory'
+  | 'dashboard' | 'notifications' | 'orders' | 'products' | 'inventory'
   | 'customers' | 'media' | 'cms' | 'payments'
   | 'shipping' | 'discounts' | 'settings' | 'staff'
   | 'reports' | 'audit' | 'import'
 
 export function AdminPage() {
   const navigate = useNavigate()
-  const { user, isAuthenticated, isAdmin, isStaff } = useAuth()
+  const { user, isAuthenticated, isAdmin } = useAuth()
   const importPending = useAdminStore(s => s.importPending)
-  const [view, setView] = useState<AdminView>('dashboard')
+  const [view, setView] = useState<AdminView>('notifications')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [syncNotification, setSyncNotification] = useState<string | null>(null)
+  const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Auto-import pending orders/stock from storefront on mount
   useEffect(() => {
     if (!isAdmin) {
       navigate(isAuthenticated ? '/' : '/login')
       return
     }
-    // Try importing any pending storefront data
+    // Initial sync on mount
     const result = importPending()
     if (result.ordersImported > 0) {
       setSyncNotification(`Imported ${result.ordersImported} new order${result.ordersImported > 1 ? 's' : ''} from storefront`)
@@ -47,9 +48,21 @@ export function AdminPage() {
         : `Updated stock for ${result.stockProductsUpdated} product${result.stockProductsUpdated > 1 ? 's' : ''}`
       )
     }
+
+    // Auto-refresh every 30 seconds so staff see new orders without reloading
+    syncIntervalRef.current = setInterval(() => {
+      const r = importPending()
+      if (r.ordersImported > 0) {
+        setSyncNotification(`${r.ordersImported} new order${r.ordersImported > 1 ? 's' : ''} just arrived`)
+      }
+    }, 30_000)
+
+    return () => {
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current)
+    }
   }, [isAdmin, isAuthenticated, navigate, importPending])
 
-  // Also listen for storage events (other tabs)
+  // Listen for storage events from other tabs
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'miniyo-sync') {
@@ -67,6 +80,7 @@ export function AdminPage() {
 
   const renderModule = () => {
     switch (view) {
+      case 'notifications': return <NotificationsModule onNavigate={setView} />
       case 'dashboard': return <DashboardModule onNavigate={setView} />
       case 'orders': return <OrdersModule />
       case 'products': return <ProductsModule />
@@ -82,7 +96,7 @@ export function AdminPage() {
       case 'audit': return <SettingsModule section="audit" />
       case 'import': return <CsvImportModule />
       case 'discounts': return <DiscountsModule />
-      default: return <DashboardModule onNavigate={setView} />
+      default: return <NotificationsModule onNavigate={setView} />
     }
   }
 

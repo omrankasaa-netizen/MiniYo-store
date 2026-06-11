@@ -3,7 +3,7 @@ import {
   LayoutDashboard, ShoppingCart, Package, ClipboardList,
   Users, Image, FileText, CreditCard, Truck, Tag, Settings,
   UserCog, BarChart3, ShieldCheck, PanelLeftClose, PanelLeft,
-  X, Download, Percent,
+  X, Download, Percent, Bell,
 } from 'lucide-react'
 import { useAdminStore } from '@/stores/adminStore'
 import type { AdminView } from '@/pages/AdminPage'
@@ -22,6 +22,7 @@ const navGroups = [
     label: 'Main',
     items: [
       { key: 'dashboard' as AdminView, label: 'Dashboard', icon: LayoutDashboard },
+      { key: 'notifications' as AdminView, label: 'Notifications', icon: Bell },
       { key: 'orders' as AdminView, label: 'Orders', icon: ShoppingCart },
       { key: 'products' as AdminView, label: 'Products', icon: Package },
       { key: 'inventory' as AdminView, label: 'Inventory', icon: ClipboardList },
@@ -57,12 +58,23 @@ const navGroups = [
 
 export function AdminSidebar({ view, onNavigate, collapsed, onToggleCollapse, mobileOpen, onCloseMobile }: Props) {
   const { orders, products } = useAdminStore()
-  const pendingWA = orders.filter(o => o.orderStatus === 'pending_confirmation' && !o.whatsappConfirmed).length
-  const lowStock = products.filter(p => p.stockQuantity <= 5 && p.stockQuantity > 0).length
+  const pendingConfirmCount = orders.filter(o => o.orderStatus === 'pending_confirmation').length
+  const pendingWACount = orders.filter(o =>
+    ['confirmed', 'packed', 'out_for_delivery'].includes(o.orderStatus) && !o.whatsappConfirmed
+  ).length
+  const totalNotif = pendingConfirmCount + pendingWACount
+  const lowStock = products.filter(p => (p.stockQuantity ?? 99) <= 5 && (p.stockQuantity ?? 99) > 0).length
 
   const NavButton = ({ item }: { item: { key: AdminView; label: string; icon: React.ElementType } }) => {
     const isActive = view === item.key
     const Icon = item.icon
+
+    // Badge logic per nav item
+    let badge: number | null = null
+    if (item.key === 'notifications') badge = totalNotif || null
+    if (item.key === 'orders') badge = pendingConfirmCount || null
+    if (item.key === 'inventory') badge = lowStock || null
+
     return (
       <button
         onClick={() => { onNavigate(item.key); onCloseMobile() }}
@@ -72,13 +84,21 @@ export function AdminSidebar({ view, onNavigate, collapsed, onToggleCollapse, mo
             : 'text-[#5C6B60] hover:bg-[#E8E4DB] hover:text-[#2D5A4C]'
         }`}
       >
-        <Icon size={18} className="shrink-0" />
+        <span className="relative shrink-0">
+          <Icon size={18} />
+          {badge != null && collapsed && (
+            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full border border-white" />
+          )}
+        </span>
         {!collapsed && <span className="truncate">{item.label}</span>}
-        {item.key === 'orders' && pendingWA > 0 && !collapsed && (
-          <span className="ml-auto bg-amber-400 text-[#2D5A4C] text-[10px] font-bold px-1.5 py-0.5 rounded-full">{pendingWA}</span>
-        )}
-        {item.key === 'inventory' && lowStock > 0 && !collapsed && (
-          <span className="ml-auto bg-red-400 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{lowStock}</span>
+        {!collapsed && badge != null && (
+          <span className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+            item.key === 'inventory'
+              ? 'bg-red-400 text-white'
+              : 'bg-amber-400 text-[#2D5A4C]'
+          }`}>
+            {badge}
+          </span>
         )}
       </button>
     )
