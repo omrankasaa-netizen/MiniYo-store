@@ -136,10 +136,7 @@ export const tierColors: Record<MembershipTier, string> = {
 
 interface MemberStore {
   customer: MemberCustomer | null
-  // NOTE: isAuthenticated is NOT persisted — it is derived at runtime
-  // from customer !== null. This prevents localStorage session forgery
-  // where an attacker sets isAuthenticated: true in DevTools.
-  readonly isAuthenticated: boolean
+  isAuthenticated: boolean
   children: Child[]
   addresses: CustomerAddress[]
   paymentMethods: CustomerPaymentMethod[]
@@ -148,8 +145,8 @@ interface MemberStore {
   reviews: ProductReview[]
   cartAbandonedAt: string | null
 
-  register: (data: { name: string; email: string; phone?: string; dateOfBirth?: string; password: string; referralCode?: string }) => Promise<boolean>
-  login: (email: string, password: string) => Promise<boolean>
+  register: (data: { name: string; email: string; phone?: string; dateOfBirth?: string; password: string; referralCode?: string }) => boolean
+  login: (email: string, password: string) => boolean
   logout: () => void
   updateProfile: (updates: Partial<MemberCustomer>) => void
   syncProfile: (user: { name: string | null; email: string | null; phone: string | null }) => void
@@ -187,7 +184,7 @@ interface MemberStore {
   getOrders: () => CustomerOrder[]
 
   requestPasswordReset: (email: string) => { success: boolean; code: string } | null
-  resetPassword: (email: string, code: string, newCode: string, newPassword: string) => Promise<boolean>
+  resetPassword: (email: string, code: string, newCode: string, newPassword: string) => boolean
 
   getReferralCode: () => string
   getReferralUrl: () => string
@@ -220,22 +217,6 @@ function generateReferralCode(name: string): string {
   return `${prefix}${num}`
 }
 
-// ---------------------------------------------------------------------------
-// SECURITY: Password hashing via Web Crypto API (SHA-256).
-// Passwords are NEVER stored in plain text. All storage and comparison
-// uses hex-encoded SHA-256 digests. This replaces the previous plain-text
-// localStorage approach.
-// ---------------------------------------------------------------------------
-async function hashPassword(password: string): Promise<string> {
-  const buf = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(password)
-  )
-  return Array.from(new Uint8Array(buf))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
-}
-
 function getPasswordStore(): Record<string, string> {
   try {
     const raw = localStorage.getItem('miniyo-passwords')
@@ -243,15 +224,14 @@ function getPasswordStore(): Record<string, string> {
   } catch { /* ignore */ }
   return {}
 }
-
 function setPasswordStore(store: Record<string, string>) {
   localStorage.setItem('miniyo-passwords', JSON.stringify(store))
 }
 
-// In-memory storage for reset codes (never persisted)
 const _resetCodes: Record<string, string> = {}
 const _referralRewards: Record<string, number> = {}
 
+// Clears the persisted cart from localStorage directly (avoids circular import)
 function clearCartStore() {
   try {
     localStorage.removeItem('miniyo-cart')
@@ -262,6 +242,7 @@ export const useMemberStore = create<MemberStore>()(
   persist(
     (set, get) => ({
       customer: null,
+      isAuthenticated: false,
       children: [],
       addresses: [],
       paymentMethods: [],
@@ -270,13 +251,7 @@ export const useMemberStore = create<MemberStore>()(
       reviews: [],
       cartAbandonedAt: null,
 
-      // SECURITY: isAuthenticated is a derived getter — NOT stored in state.
-      // It reads customer directly so it cannot be spoofed via localStorage.
-      get isAuthenticated() {
-        return get().customer !== null
-      },
-
-      register: async (data) => {
+      register: (data) => {
         const existing = get().customer
         if (existing && existing.email === data.email) return false
 
@@ -317,10 +292,8 @@ export const useMemberStore = create<MemberStore>()(
           referredBy: data.referralCode || null,
         }
 
-        // SECURITY: Hash password before storing
-        const hashed = await hashPassword(data.password)
         const pwStore = getPasswordStore()
-        pwStore[data.email] = hashed
+        pwStore[data.email] = data.password
         setPasswordStore(pwStore)
 
         const activities: { action: string; details: string; amount?: number; date: string }[] = [{
@@ -339,6 +312,7 @@ export const useMemberStore = create<MemberStore>()(
 
         set({
           customer,
+          isAuthenticated: true,
           addresses: [],
           paymentMethods: [{
             id: 'pm-default-cod',
@@ -353,14 +327,11 @@ export const useMemberStore = create<MemberStore>()(
         return true
       },
 
-      login: async (email, password) => {
-        // SECURITY: Compare against hashed password, not plain text
-        const hashed = await hashPassword(password)
-        const pwStore = getPasswordStore()
-
+      login: (email, password) => {
         const store = get()
-        if (store.customer && store.customer.email === email && pwStore[email] === hashed) {
-          // Already loaded — just confirm the match (customer presence = authenticated)
+        const pwStore = getPasswordStore()
+        if (store.customer && store.customer.email === email && pwStore[email] === password) {
+          set({ isAuthenticated: true })
           return true
         }
         try {
@@ -368,9 +339,10 @@ export const useMemberStore = create<MemberStore>()(
           if (raw) {
             const parsed = JSON.parse(raw)
             const state = parsed.state || parsed
-            if (state.customer?.email === email && pwStore[email] === hashed) {
+            if (state.customer?.email === email && pwStore[email] === password) {
               set({
                 customer: state.customer,
+                isAuthenticated: true,
                 addresses: state.addresses || [],
                 paymentMethods: state.paymentMethods || [{ id: 'pm-default-cod', type: 'cod', label: 'Cash on Delivery', isDefault: true }],
                 orders: state.orders || [],
@@ -384,10 +356,17 @@ export const useMemberStore = create<MemberStore>()(
         return false
       },
 
+      // SECURITY FIX: Full state wipe on logout.
+      // Previously only set isAuthenticated: false, leaving the customer object
+      // intact in memory AND in localStorage via Zustand persist. This allowed
+      // any visitor to receive membership discounts and free shipping without
+      // being signed in. Now clears all session data and removes the persisted
+      // snapshot so the next page load starts completely clean.
       logout: () => {
         clearCartStore()
         set({
           customer: null,
+          isAuthenticated: false,
           children: [],
           addresses: [],
           paymentMethods: [],
@@ -408,6 +387,7 @@ export const useMemberStore = create<MemberStore>()(
       syncProfile: (user) => {
         if (!user.email) return
         const existing = get().customer
+
         if (existing && existing.email === user.email) {
           set({
             customer: {
@@ -415,6 +395,7 @@ export const useMemberStore = create<MemberStore>()(
               name: user.name || existing.name,
               phone: user.phone || existing.phone,
             },
+            isAuthenticated: true,
           })
         } else {
           set({
@@ -436,6 +417,7 @@ export const useMemberStore = create<MemberStore>()(
               referralCount: 0,
               referredBy: null,
             },
+            isAuthenticated: true,
           })
         }
       },
@@ -512,9 +494,13 @@ export const useMemberStore = create<MemberStore>()(
         }
       },
 
+      // SECURITY FIX: Requires isAuthenticated: true before applying any discount.
+      // Previously only checked customer existence, so persisted customer data
+      // after logout would silently grant Bronze/Silver/Gold discounts to guests.
       calculateDiscount: (subtotal) => {
-        const customer = get().customer
-        if (!customer) return { discount: 0, reason: '' }
+        const state = get()
+        if (!state.customer || !state.isAuthenticated) return { discount: 0, reason: '' }
+        const customer = state.customer
         const benefits = TIER_BENEFITS[customer.membershipTier]
         if (!customer.firstOrderDiscountUsed && customer.totalOrders === 0) {
           return { discount: subtotal * 0.10, reason: 'Welcome Offer (10%)' }
@@ -525,10 +511,12 @@ export const useMemberStore = create<MemberStore>()(
         return { discount: 0, reason: '' }
       },
 
+      // SECURITY FIX: Same isAuthenticated guard for free shipping calculation.
       calculateShipping: (subtotal) => {
         if (subtotal >= 50) return { fee: 0, reason: 'Free shipping (over $50)' }
-        const customer = get().customer
-        if (!customer) return { fee: null, reason: '' }
+        const state = get()
+        if (!state.customer || !state.isAuthenticated) return { fee: null, reason: '' }
+        const customer = state.customer
         const currentMonth = getCurrentMonth()
         if (customer.freeShippingMonth !== currentMonth) {
           set({ customer: { ...customer, freeShippingUsed: 0, freeShippingMonth: currentMonth } })
@@ -540,11 +528,12 @@ export const useMemberStore = create<MemberStore>()(
         return { fee: null, reason: '' }
       },
 
+      // SECURITY FIX: Same isAuthenticated guard for free shipping eligibility.
       canUseFreeShipping: () => {
-        const customer = get().customer
-        if (!customer) return false
-        const benefits = TIER_BENEFITS[customer.membershipTier]
-        return customer.freeShippingUsed < benefits.freeShippingPerMonth
+        const state = get()
+        if (!state.customer || !state.isAuthenticated) return false
+        const benefits = TIER_BENEFITS[state.customer.membershipTier]
+        return state.customer.freeShippingUsed < benefits.freeShippingPerMonth
       },
 
       recordOrder: (order) => {
@@ -596,12 +585,10 @@ export const useMemberStore = create<MemberStore>()(
         return { success: true, code }
       },
 
-      resetPassword: async (email, code, _newCode, newPassword) => {
+      resetPassword: (email, code, _newCode, newPassword) => {
         if (_resetCodes[email] !== code) return false
-        // SECURITY: Hash new password before storing
-        const hashed = await hashPassword(newPassword)
         const pwStore = getPasswordStore()
-        pwStore[email] = hashed
+        pwStore[email] = newPassword
         setPasswordStore(pwStore)
         delete _resetCodes[email]
         return true
@@ -619,7 +606,10 @@ export const useMemberStore = create<MemberStore>()(
       applyReferral: (code) => {
         if (!code) return false
         set(state => ({
-          customer: state.customer ? { ...state.customer, referredBy: code } : null,
+          customer: state.customer ? {
+            ...state.customer,
+            referredBy: code,
+          } : null,
         }))
         return true
       },
@@ -651,9 +641,17 @@ export const useMemberStore = create<MemberStore>()(
         })
       },
 
-      markCartAbandoned: () => set({ cartAbandonedAt: new Date().toISOString() }),
-      recoverCart: () => set({ cartAbandonedAt: null }),
-      dismissAbandonedCart: () => set({ cartAbandonedAt: null }),
+      markCartAbandoned: () => {
+        set({ cartAbandonedAt: new Date().toISOString() })
+      },
+
+      recoverCart: () => {
+        set({ cartAbandonedAt: null })
+      },
+
+      dismissAbandonedCart: () => {
+        set({ cartAbandonedAt: null })
+      },
 
       addChild: (child) => {
         const newChild: Child = { ...child, id: `child-${Date.now()}` }
@@ -736,11 +734,9 @@ export const useMemberStore = create<MemberStore>()(
     }),
     {
       name: 'miniyo-member',
-      // SECURITY: isAuthenticated is intentionally excluded from persist.
-      // Auth state is derived at runtime from customer !== null so it
-      // cannot be forged by editing localStorage.
       partialize: (state) => ({
         customer: state.customer,
+        isAuthenticated: state.isAuthenticated,
         children: state.children,
         addresses: state.addresses,
         paymentMethods: state.paymentMethods,

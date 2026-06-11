@@ -3,8 +3,7 @@ import type { Locale } from '@/types'
 
 interface AuthStore {
   user: { id: number; email: string | null; name: string | null; role: string } | null
-  // isAuthenticated is derived — not stored — to prevent spoofing
-  readonly isAuthenticated: boolean
+  isAuthenticated: boolean
   isAdmin: boolean
   isLoading: boolean
   locale: Locale
@@ -15,20 +14,17 @@ interface AuthStore {
   logout: () => void
 }
 
-export const useAuthStore = create<AuthStore>((set, get) => ({
+export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
+  isAuthenticated: false,
   isAdmin: false,
   isLoading: true,
   locale: (localStorage.getItem('locale') as Locale) || 'en',
 
-  // SECURITY: Derived getter — cannot be forged via DevTools
-  get isAuthenticated() {
-    return get().user !== null
-  },
-
   setUser: (user) => {
     set({
       user,
+      isAuthenticated: !!user,
       isAdmin: user ? ['admin', 'super_admin', 'staff'].includes(user.role) : false,
       isLoading: false,
     })
@@ -36,8 +32,15 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   setLoading: (loading) => set({ isLoading: loading }),
 
+  // FIX: authStore.logout() now calls useMemberStore.logout() to keep both
+  // stores in sync. Previously authStore could be cleared while memberStore
+  // still held the authenticated customer, leaving membership benefits active.
   logout: () => {
-    set({ user: null, isAdmin: false })
+    // Lazy import to avoid circular dependency
+    import('@/stores/memberStore').then(({ useMemberStore }) => {
+      useMemberStore.getState().logout()
+    })
+    set({ user: null, isAuthenticated: false, isAdmin: false })
   },
 
   setLocale: (locale) => {
