@@ -32,22 +32,23 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   setLoading: (loading) => set({ isLoading: loading }),
 
-  // FIX: Also clear the memberStore session on logout so both auth systems
-  // stay in sync. Previously authStore.logout() only cleared its own state,
-  // leaving memberStore.isAuthenticated = true and the customer object intact,
-  // which allowed membership benefits and checkout to remain accessible.
+  /**
+   * FIX: logout now also wipes memberStore + cart.
+   * Previously authStore and memberStore were independent — logging out of one
+   * left the other intact, so membership discounts persisted for anonymous visitors.
+   */
   logout: () => {
-    // Dynamically import to avoid circular dependency at module load time
+    set({ user: null, isAuthenticated: false, isAdmin: false })
+    // Lazy import to avoid circular dependency at module load time
     import('@/stores/memberStore').then(({ useMemberStore }) => {
       useMemberStore.getState().logout()
     }).catch(() => {
-      // Fallback: clear localStorage keys directly if dynamic import fails
+      // Fallback: wipe localStorage keys directly if import fails
       try {
         localStorage.removeItem('miniyo-member')
         localStorage.removeItem('miniyo-cart')
       } catch { /* ignore */ }
     })
-    set({ user: null, isAuthenticated: false, isAdmin: false })
   },
 
   setLocale: (locale) => {
