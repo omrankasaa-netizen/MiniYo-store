@@ -72,6 +72,25 @@ export function CheckoutPage({ locale }: CheckoutPageProps) {
     whatsappUpdates: false,
   })
 
+  // Reset / pre-fill form whenever the authenticated customer changes (e.g. on logout)
+  useEffect(() => {
+    const defaultAddress = customer ? (addresses.find(a => a.isDefault) || addresses[0]) : undefined
+    setForm({
+      email: customer?.email || '',
+      phone: customer ? (customer.phone || defaultAddress?.phone || '') : '',
+      fullName: customer ? (customer.name || defaultAddress?.fullName || '') : '',
+      city: customer ? (defaultAddress?.city || '') : '',
+      district: customer ? (defaultAddress?.district || '') : '',
+      street: customer ? (defaultAddress?.street || '') : '',
+      building: customer ? (defaultAddress?.building || '') : '',
+      floor: customer ? (defaultAddress?.floor || '') : '',
+      apartment: customer ? (defaultAddress?.apartment || '') : '',
+      landmark: customer ? (defaultAddress?.landmark || '') : '',
+      notes: '',
+      whatsappUpdates: false,
+    })
+  }, [customer, addresses])
+
   // Calculate member discount + promo code
   const memberDiscount = customer ? memberStore.calculateDiscount(subtotal) : { discount: 0, reason: '' }
   const promoDiscount = promoCode ? discountStore.calculateDiscount(promoCode, subtotal) : { discount: 0, reason: '' }
