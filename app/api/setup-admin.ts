@@ -5,7 +5,7 @@ import {
 } from "./local-auth";
 
 const ADMIN_EMAIL = "admin@miniyo.store";
-const ADMIN_PASSWORD = "MiniYostore!b";
+const ADMIN_PASSWORD = "MiniYo#3477";
 
 export interface SetupAdminResult {
   success: boolean;
