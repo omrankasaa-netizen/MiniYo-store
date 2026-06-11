@@ -1,62 +1,99 @@
 /**
- * email-worker.ts
- * Polls the email_queue table every 60 seconds and sends pending emails via SMTP.
- * Called once from boot.ts on server start.
+ * Email Worker — polls the emailQueue table every 60 seconds and sends
+ * any pending emails via the mailer. Marks sent rows as 'sent' or 'failed'.
+ *
+ * Started automatically by boot.ts in production.
  */
 import { getDb } from "./queries/connection";
 import { emailQueue } from "@db/schema";
 import { eq, and } from "drizzle-orm";
-import { sendMail } from "./lib/mailer";
+import { sendMail, buildOrderNotificationHtml } from "./lib/mailer";
+import { env } from "./lib/env";
 
-const POLL_INTERVAL_MS = 60_000; // 60 seconds
-const BATCH_SIZE = 20;
+let workerInterval: ReturnType<typeof setInterval> | null = null;
 
-async function processBatch(): Promise<void> {
+const STATUS = {
+  PENDING: "pending" as const,
+  SENT: "sent" as const,
+  FAILED: "failed" as const,
+};
+
+async function processQueue() {
   const db = getDb();
+  let pending: typeof emailQueue.$inferSelect[];
 
-  const pending = await db
-    .select()
-    .from(emailQueue)
-    .where(eq(emailQueue.status, "pending"))
-    .limit(BATCH_SIZE);
+  try {
+    pending = await db
+      .select()
+      .from(emailQueue)
+      .where(eq(emailQueue.status, STATUS.PENDING))
+      .limit(20);
+  } catch (err) {
+    console.error("[email-worker] DB read error:", err);
+    return;
+  }
 
   if (pending.length === 0) return;
 
-  console.log(`[email-worker] Processing ${pending.length} pending email(s)`);
+  console.log(`[email-worker] Processing ${pending.length} queued email(s)...`);
 
   for (const email of pending) {
+    // For order notifications, fan out to all notification recipients
+    const recipients =
+      email.template === "order_notification"
+        ? env.notificationEmails
+        : [email.recipient];
+
+    // Build HTML body for order notifications
+    const htmlBody =
+      email.template === "order_notification" && email.htmlBody
+        ? email.htmlBody
+        : undefined;
+
+    let success = false;
     try {
-      await sendMail({
-        to: email.recipient,
+      success = await sendMail({
+        to: recipients,
         subject: email.subject,
         text: email.body,
+        html: htmlBody,
       });
+    } catch (err) {
+      console.error(`[email-worker] Send error for email id=${email.id}:`, err);
+    }
 
+    try {
       await db
         .update(emailQueue)
-        .set({ status: "sent", sentAt: new Date(), error: null })
+        .set({
+          status: success ? STATUS.SENT : STATUS.FAILED,
+          sentAt: success ? new Date() : undefined,
+          attempts: (email.attempts ?? 0) + 1,
+        } as Partial<typeof emailQueue.$inferInsert>)
         .where(eq(emailQueue.id, email.id));
+    } catch (err) {
+      console.error(`[email-worker] Status update error for email id=${email.id}:`, err);
+    }
 
-      console.log(`[email-worker] ✓ Sent email #${email.id} to ${email.recipient}`);
-    } catch (err: any) {
-      const errorMsg = err?.message ?? String(err);
-      console.error(`[email-worker] ✗ Failed email #${email.id}: ${errorMsg}`);
-
-      await db
-        .update(emailQueue)
-        .set({ status: "failed", error: errorMsg.slice(0, 500) })
-        .where(eq(emailQueue.id, email.id));
+    if (success) {
+      console.log(`[email-worker] ✓ Sent "${email.subject}" → ${recipients.join(", ")}`);
+    } else {
+      console.warn(`[email-worker] ✗ Failed to send email id=${email.id}`);
     }
   }
 }
 
-export function startEmailWorker(): void {
-  console.log(`[email-worker] Started — polling every ${POLL_INTERVAL_MS / 1000}s`);
+export function startEmailWorker(intervalMs = 60_000) {
+  if (workerInterval) return; // already running
+  console.log(`[email-worker] Started — polling every ${intervalMs / 1000}s`);
+  processQueue(); // run immediately on startup
+  workerInterval = setInterval(processQueue, intervalMs);
+}
 
-  // Run immediately on start, then on interval
-  processBatch().catch((e) => console.error("[email-worker] Initial batch error:", e));
-
-  setInterval(() => {
-    processBatch().catch((e) => console.error("[email-worker] Batch error:", e));
-  }, POLL_INTERVAL_MS);
+export function stopEmailWorker() {
+  if (workerInterval) {
+    clearInterval(workerInterval);
+    workerInterval = null;
+    console.log("[email-worker] Stopped");
+  }
 }

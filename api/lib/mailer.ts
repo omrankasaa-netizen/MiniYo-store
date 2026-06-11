@@ -1,34 +1,26 @@
 /**
- * mailer.ts — SMTP email sender using Nodemailer
- * Compatible with GoDaddy Professional Email / Microsoft 365 Exchange
- * Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS in Railway environment variables
+ * Mailer — sends transactional email via GoDaddy SMTP (Management@miniyo.store)
+ * Falls back to console.log in development so no SMTP is needed locally.
  */
 import nodemailer from "nodemailer";
 import { env } from "./env";
 
-let _transporter: nodemailer.Transporter | null = null;
-
-function getTransporter(): nodemailer.Transporter {
-  if (_transporter) return _transporter;
-
-  const host = process.env.SMTP_HOST || "smtpout.secureserver.net";
-  const port = parseInt(process.env.SMTP_PORT || "465");
-  const user = process.env.SMTP_USER || env.adminEmail;
-  const pass = process.env.SMTP_PASS || "";
-
-  if (!pass) {
-    console.warn("[mailer] SMTP_PASS not set — emails will be queued but not sent until configured");
+function createTransport() {
+  if (!env.smtpHost || !env.smtpUser || !env.smtpPass) {
+    return null;
   }
-
-  _transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-    tls: { rejectUnauthorized: false },
+  return nodemailer.createTransport({
+    host: env.smtpHost,
+    port: env.smtpPort,
+    secure: env.smtpPort === 465,
+    auth: {
+      user: env.smtpUser,
+      pass: env.smtpPass,
+    },
+    tls: {
+      rejectUnauthorized: false, // GoDaddy hosted email compatibility
+    },
   });
-
-  return _transporter;
 }
 
 export interface MailOptions {
@@ -36,61 +28,142 @@ export interface MailOptions {
   subject: string;
   text: string;
   html?: string;
+  replyTo?: string;
 }
 
-export async function sendMail(opts: MailOptions): Promise<void> {
-  const transporter = getTransporter();
-  const from = `"Miniyo Store" <${process.env.SMTP_USER || env.adminEmail}>`;
+export async function sendMail(opts: MailOptions): Promise<boolean> {
+  const transport = createTransport();
 
-  await transporter.sendMail({
-    from,
-    to: Array.isArray(opts.to) ? opts.to.join(", ") : opts.to,
-    subject: opts.subject,
-    text: opts.text,
-    html: opts.html ?? opts.text.replace(/\n/g, "<br>"),
-  });
+  if (!transport) {
+    // Dev fallback — log to console
+    console.log("[mailer] DEV MODE — email not sent:");
+    console.log(`  To: ${Array.isArray(opts.to) ? opts.to.join(", ") : opts.to}`);
+    console.log(`  Subject: ${opts.subject}`);
+    console.log(`  Body: ${opts.text}`);
+    return true;
+  }
+
+  try {
+    await transport.sendMail({
+      from: `"Miniyo Store" <${env.smtpUser}>`,
+      to: Array.isArray(opts.to) ? opts.to.join(", ") : opts.to,
+      subject: opts.subject,
+      text: opts.text,
+      html: opts.html ?? opts.text.replace(/\n/g, "<br>"),
+      replyTo: opts.replyTo,
+    });
+    return true;
+  } catch (err) {
+    console.error("[mailer] Failed to send email:", err);
+    return false;
+  }
 }
 
-/** Builds a styled HTML order notification email */
-export function buildOrderNotificationHtml(data: {
+/**
+ * Builds a styled HTML email body for order notifications.
+ */
+export function buildOrderNotificationHtml(order: {
   orderNumber: string;
   customerName: string;
   customerPhone: string;
+  customerEmail?: string;
   grandTotal: number | string;
   paymentMethod: string;
-  items?: Array<{ productName: string; quantity: number; unitPrice: number | string }>;
   shippingAddress?: Record<string, string>;
+  items: Array<{ productName: string; quantity: number; unitPrice: number | string; color?: string; size?: string }>;
+  customerNotes?: string;
 }): string {
-  const itemRows = (data.items ?? []).map(i =>
-    `<tr><td style="padding:6px 12px;border-bottom:1px solid #f0ebe4">${i.productName}</td><td style="padding:6px 12px;border-bottom:1px solid #f0ebe4;text-align:center">${i.quantity}</td><td style="padding:6px 12px;border-bottom:1px solid #f0ebe4;text-align:right">$${Number(i.unitPrice).toFixed(2)}</td></tr>`
-  ).join("");
+  const paymentLabels: Record<string, string> = {
+    cod: "Cash on Delivery",
+    wish: "Wish Money Transfer",
+    card: "Card Payment",
+  };
+  const paymentLabel = paymentLabels[order.paymentMethod] ?? order.paymentMethod;
 
-  const addressBlock = data.shippingAddress
-    ? Object.entries(data.shippingAddress).filter(([, v]) => v).map(([k, v]) => `<div><strong>${k}:</strong> ${v}</div>`).join("")
+  const addressHtml = order.shippingAddress
+    ? Object.entries(order.shippingAddress)
+        .filter(([, v]) => v)
+        .map(([k, v]) => `<tr><td style="color:#8B8578;padding:2px 8px 2px 0;font-size:12px;">${k}:</td><td style="font-size:13px;">${v}</td></tr>`)
+        .join("")
     : "";
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f7f6f2;font-family:'Helvetica Neue',Arial,sans-serif">
-<div style="max-width:600px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08)">
-  <div style="background:#01696f;padding:28px 32px">
-    <h1 style="color:#fff;margin:0;font-size:22px;font-weight:700">🛍️ New Order Received</h1>
-    <p style="color:rgba(255,255,255,.8);margin:6px 0 0;font-size:14px">Order ${data.orderNumber}</p>
-  </div>
-  <div style="padding:28px 32px">
-    <table style="width:100%;margin-bottom:20px">
-      <tr><td style="color:#7a7974;font-size:13px;padding:4px 0">Customer</td><td style="font-weight:600;text-align:right">${data.customerName}</td></tr>
-      <tr><td style="color:#7a7974;font-size:13px;padding:4px 0">Phone</td><td style="font-weight:600;text-align:right">${data.customerPhone}</td></tr>
-      <tr><td style="color:#7a7974;font-size:13px;padding:4px 0">Payment</td><td style="font-weight:600;text-align:right;text-transform:uppercase">${data.paymentMethod}</td></tr>
-      <tr><td style="color:#7a7974;font-size:13px;padding:4px 0">Total</td><td style="font-weight:700;font-size:18px;color:#01696f;text-align:right">$${Number(data.grandTotal).toFixed(2)}</td></tr>
-    </table>
-    ${itemRows ? `<h3 style="font-size:14px;color:#28251d;margin:0 0 8px">Items</h3><table style="width:100%;border-collapse:collapse"><thead><tr style="background:#f7f6f2"><th style="padding:8px 12px;text-align:left;font-size:12px;color:#7a7974">Product</th><th style="padding:8px 12px;text-align:center;font-size:12px;color:#7a7974">Qty</th><th style="padding:8px 12px;text-align:right;font-size:12px;color:#7a7974">Price</th></tr></thead><tbody>${itemRows}</tbody></table>` : ""}
-    ${addressBlock ? `<div style="margin-top:20px;padding:16px;background:#f7f6f2;border-radius:8px"><h3 style="font-size:13px;color:#7a7974;margin:0 0 8px">Shipping Address</h3>${addressBlock}</div>` : ""}
-    <div style="margin-top:24px;text-align:center">
-      <a href="https://miniyo.store/#/admin" style="display:inline-block;background:#01696f;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">View in Admin Panel</a>
-    </div>
-  </div>
-  <div style="background:#f7f6f2;padding:16px 32px;text-align:center">
-    <p style="color:#bab9b4;font-size:12px;margin:0">Miniyo Store — Lebanon's children's clothing boutique</p>
-  </div>
-</div>
-</body></html>`;
+  const itemsHtml = order.items
+    .map(
+      (item) =>
+        `<tr style="border-bottom:1px solid #F2EFE9;">
+          <td style="padding:8px 12px;font-size:13px;color:#2D5A4C;">${item.productName}${
+            item.color ? ` <span style="color:#8B8578;">(${item.color}${item.size ? " / " + item.size : ""})</span>` : ""
+          }</td>
+          <td style="padding:8px 12px;font-size:13px;text-align:center;">${item.quantity}</td>
+          <td style="padding:8px 12px;font-size:13px;text-align:right;">$${Number(item.unitPrice).toFixed(2)}</td>
+        </tr>`
+    )
+    .join("");
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#F2EFE9;font-family:'Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F2EFE9;padding:32px 16px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,0.07);">
+        <!-- Header -->
+        <tr><td style="background:#2D5A4C;padding:24px 32px;">
+          <h1 style="margin:0;color:#fff;font-size:20px;font-weight:600;">🛍️ New Order Received</h1>
+          <p style="margin:4px 0 0;color:#A8D5C4;font-size:13px;">Order ${order.orderNumber}</p>
+        </td></tr>
+
+        <!-- Customer Info -->
+        <tr><td style="padding:24px 32px 0;">
+          <h2 style="margin:0 0 12px;font-size:14px;color:#8B8578;text-transform:uppercase;letter-spacing:0.05em;">Customer</h2>
+          <table cellpadding="0" cellspacing="0">
+            <tr><td style="font-size:16px;font-weight:600;color:#2D5A4C;padding-bottom:4px;">${order.customerName}</td></tr>
+            <tr><td style="font-size:13px;color:#5C6B60;">📞 ${order.customerPhone}</td></tr>
+            ${order.customerEmail ? `<tr><td style="font-size:13px;color:#5C6B60;">✉️ ${order.customerEmail}</td></tr>` : ""}
+          </table>
+        </td></tr>
+
+        <!-- Shipping Address -->
+        ${addressHtml ? `<tr><td style="padding:16px 32px 0;">
+          <h2 style="margin:0 0 8px;font-size:14px;color:#8B8578;text-transform:uppercase;letter-spacing:0.05em;">Delivery Address</h2>
+          <table>${addressHtml}</table>
+        </td></tr>` : ""}
+
+        <!-- Items -->
+        <tr><td style="padding:24px 32px 0;">
+          <h2 style="margin:0 0 8px;font-size:14px;color:#8B8578;text-transform:uppercase;letter-spacing:0.05em;">Items</h2>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #E8E4DB;border-radius:8px;overflow:hidden;">
+            <thead><tr style="background:#F5F0E6;">
+              <th style="text-align:left;padding:8px 12px;font-size:11px;color:#8B8578;font-weight:600;">PRODUCT</th>
+              <th style="text-align:center;padding:8px 12px;font-size:11px;color:#8B8578;font-weight:600;">QTY</th>
+              <th style="text-align:right;padding:8px 12px;font-size:11px;color:#8B8578;font-weight:600;">PRICE</th>
+            </tr></thead>
+            <tbody>${itemsHtml}</tbody>
+          </table>
+        </td></tr>
+
+        <!-- Total + Payment -->
+        <tr><td style="padding:20px 32px;">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="font-size:15px;font-weight:700;color:#2D5A4C;">Grand Total: $${Number(order.grandTotal).toFixed(2)}</td>
+              <td style="text-align:right;">
+                <span style="background:#E8F4F0;color:#2D5A4C;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;">${paymentLabel}</span>
+              </td>
+            </tr>
+          </table>
+          ${order.customerNotes ? `<p style="margin:12px 0 0;padding:10px 14px;background:#FFF9F0;border-left:3px solid #8FAE7B;border-radius:4px;font-size:13px;color:#5C6B60;"><strong>Note:</strong> ${order.customerNotes}</p>` : ""}
+        </td></tr>
+
+        <!-- Footer -->
+        <tr><td style="background:#F5F0E6;padding:16px 32px;text-align:center;">
+          <p style="margin:0;font-size:11px;color:#A8A396;">Miniyo Store — Lebanon's curated children's fashion boutique</p>
+          <p style="margin:4px 0 0;font-size:11px;color:#A8A396;">miniyo.store · Management@miniyo.store</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
 }

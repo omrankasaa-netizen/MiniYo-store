@@ -7,8 +7,8 @@ import {
   faqs, promoCodes, wishlistItems, inventoryMovements,
 } from "@db/schema";
 import { eq, desc, and, sql, count } from "drizzle-orm";
+import { sendMail, buildOrderNotificationHtml } from "./lib/mailer";
 import { env } from "./lib/env";
-import { buildOrderNotificationHtml } from "./lib/mailer";
 
 // ── Products ──
 const productRouter = createRouter({
@@ -229,6 +229,7 @@ const orderRouter = createRouter({
 
       const orderId = result.id;
 
+      // Insert order items
       if (input.items.length > 0) {
         await db.insert(orderItems).values(
           input.items.map(item => ({
@@ -237,7 +238,6 @@ const orderRouter = createRouter({
             productName: item.productName,
             quantity: item.quantity,
             unitPrice: String(item.unitPrice),
-            lineTotal: String(item.unitPrice * item.quantity),
             sku: item.sku,
             color: item.color,
             size: item.size,
@@ -252,36 +252,34 @@ const orderRouter = createRouter({
           .where(eq(products.id, item.productId));
       }
 
-      // Queue notification emails to all staff recipients
-      const recipients = env.notifyEmails;
+      // Build styled HTML for the notification email
       const htmlBody = buildOrderNotificationHtml({
         orderNumber: input.orderNumber,
         customerName: input.customerName,
         customerPhone: input.customerPhone,
+        customerEmail: input.customerEmail,
         grandTotal: input.grandTotal,
         paymentMethod: input.paymentMethod,
-        items: input.items.map(i => ({ productName: i.productName, quantity: i.quantity, unitPrice: i.unitPrice })),
-        shippingAddress: input.shippingAddress as Record<string, string> | undefined,
+        shippingAddress: input.shippingAddress,
+        items: input.items.map(i => ({
+          productName: i.productName,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          color: i.color,
+          size: i.size,
+        })),
+        customerNotes: input.customerNotes,
       });
 
-      for (const recipient of recipients) {
-        await db.insert(emailQueue).values({
-          recipient,
-          subject: `🛍️ New Order: ${input.orderNumber} — ${input.customerName} — $${input.grandTotal}`,
-          body: `New order ${input.orderNumber} from ${input.customerName}\nPhone: ${input.customerPhone}\nTotal: $${input.grandTotal}\nPayment: ${input.paymentMethod}\n\nView: https://miniyo.store/#/admin`,
-          template: "order_notification",
-        });
-      }
-
-      // Also queue confirmation email to customer if email provided
-      if (input.customerEmail) {
-        await db.insert(emailQueue).values({
-          recipient: input.customerEmail,
-          subject: `✅ Your Miniyo order ${input.orderNumber} is confirmed!`,
-          body: `Hi ${input.customerName},\n\nThank you for your order! We've received order ${input.orderNumber} and will be in touch shortly.\n\nTotal: $${input.grandTotal}\nPayment: ${input.paymentMethod}\n\nIf you have any questions, reach us on WhatsApp or at admin@miniyo.store\n\nWith love,\nThe Miniyo Team 💛`,
-          template: "order_confirmation",
-        });
-      }
+      // Queue notification email — worker picks it up within 60s
+      // Fan-out to all NOTIFICATION_EMAILS is handled in the worker
+      await db.insert(emailQueue).values({
+        recipient: env.notificationEmails[0] ?? "Management@miniyo.store",
+        subject: `🛍️ New Order: ${input.orderNumber} — ${input.customerName} ($${input.grandTotal})`,
+        body: `New order ${input.orderNumber} from ${input.customerName}\nPhone: ${input.customerPhone}\nTotal: $${input.grandTotal}\nPayment: ${input.paymentMethod}`,
+        htmlBody,
+        template: "order_notification",
+      } as any);
 
       return db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
     }),
@@ -337,17 +335,21 @@ const customerRouter = createRouter({
     .mutation(async ({ input }) => {
       const db = getDb();
 
+      // Check if customer with this email already exists
       if (input.email) {
         const existing = await db.select().from(customers).where(eq(customers.email, input.email)).limit(1);
-        if (existing[0]) return existing[0];
+        if (existing[0]) {
+          return existing[0];
+        }
       }
 
       const [result] = await db.insert(customers).values(input).$returningId();
 
+      // Queue welcome email
       if (input.email) {
         await db.insert(emailQueue).values({
           recipient: input.email,
-          subject: "Welcome to Miniyo! 💛",
+          subject: "Welcome to Miniyo! 🛍️",
           body: `Hi ${input.name},\n\nWelcome to Miniyo! We're so excited to have you join our family of happy parents across Lebanon.\n\nShop our curated collection: https://miniyo.store\n\nWith love,\nThe Miniyo Team`,
           template: "welcome",
         });
@@ -402,92 +404,151 @@ const mediaRouter = createRouter({
 
 // ── CMS ──
 const cmsRouter = createRouter({
-  list: publicQuery
-    .input(z.object({ key: z.string().optional() }).optional())
-    .query(async ({ input }) => {
-      const db = getDb();
-      if (input?.key) {
-        return db.select().from(cmsSections).where(eq(cmsSections.sectionKey, input.key)).limit(1);
-      }
-      return db.select().from(cmsSections).orderBy(cmsSections.sortOrder);
-    }),
+  list: publicQuery.query(async () => {
+    return getDb().select().from(cmsSections).orderBy(cmsSections.sortOrder);
+  }),
 
-  getByKey: publicQuery
-    .input(z.object({ key: z.string() }))
-    .query(async ({ input }) => {
-      return getDb().select().from(cmsSections).where(eq(cmsSections.sectionKey, input.key)).limit(1);
-    }),
-
-  update: adminQuery
+  upsert: adminQuery
     .input(z.object({
-      id: z.number(),
-      data: z.record(z.any()),
+      key: z.string(),
+      title: z.string().optional(),
+      titleAr: z.string().optional(),
+      body: z.string().optional(),
+      bodyAr: z.string().optional(),
+      imageUrl: z.string().optional(),
+      isActive: z.boolean().default(true),
+      sortOrder: z.number().default(0),
+      meta: z.any().optional(),
     }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      await db.update(cmsSections).set(input.data).where(eq(cmsSections.id, input.id));
-      return db.select().from(cmsSections).where(eq(cmsSections.id, input.id)).limit(1);
+      const existing = await db.select().from(cmsSections).where(eq(cmsSections.key, input.key)).limit(1);
+      if (existing[0]) {
+        await db.update(cmsSections).set(input).where(eq(cmsSections.key, input.key));
+      } else {
+        await db.insert(cmsSections).values(input);
+      }
+      return db.select().from(cmsSections).where(eq(cmsSections.key, input.key)).limit(1);
+    }),
+
+  delete: adminQuery
+    .input(z.object({ key: z.string() }))
+    .mutation(async ({ input }) => {
+      await getDb().delete(cmsSections).where(eq(cmsSections.key, input.key));
+      return { success: true };
     }),
 });
 
-// ── Settings ──
-const settingsRouter = createRouter({
-  getAll: publicQuery.query(async () => {
-    return getDb().select().from(siteSettings);
+// ── Site Settings ──
+const siteSettingsRouter = createRouter({
+  get: publicQuery.query(async () => {
+    const rows = await getDb().select().from(siteSettings);
+    return Object.fromEntries(rows.map(r => [r.key, r.value]));
   }),
-
-  getByKey: publicQuery
-    .input(z.object({ key: z.string() }))
-    .query(async ({ input }) => {
-      return getDb().select().from(siteSettings).where(eq(siteSettings.settingKey, input.key)).limit(1);
-    }),
 
   set: adminQuery
     .input(z.object({ key: z.string(), value: z.string() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      await db.insert(siteSettings)
-        .values({ settingKey: input.key, settingValue: input.value })
-        .onDuplicateKeyUpdate({ set: { settingValue: input.value } });
-      return db.select().from(siteSettings).where(eq(siteSettings.settingKey, input.key)).limit(1);
+      const existing = await db.select().from(siteSettings).where(eq(siteSettings.key, input.key)).limit(1);
+      if (existing[0]) {
+        await db.update(siteSettings).set({ value: input.value }).where(eq(siteSettings.key, input.key));
+      } else {
+        await db.insert(siteSettings).values(input);
+      }
+      return { key: input.key, value: input.value };
     }),
 
-  setMany: adminQuery
-    .input(z.record(z.string()))
+  setBulk: adminQuery
+    .input(z.array(z.object({ key: z.string(), value: z.string() })))
     .mutation(async ({ input }) => {
       const db = getDb();
-      for (const [key, value] of Object.entries(input)) {
-        await db.insert(siteSettings)
-          .values({ settingKey: key, settingValue: value })
-          .onDuplicateKeyUpdate({ set: { settingValue: value } });
+      for (const { key, value } of input) {
+        const existing = await db.select().from(siteSettings).where(eq(siteSettings.key, key)).limit(1);
+        if (existing[0]) {
+          await db.update(siteSettings).set({ value }).where(eq(siteSettings.key, key));
+        } else {
+          await db.insert(siteSettings).values({ key, value });
+        }
       }
-      return db.select().from(siteSettings);
+      return { saved: input.length };
+    }),
+});
+
+// ── FAQs ──
+const faqRouter = createRouter({
+  list: publicQuery.query(async () => {
+    return getDb().select().from(faqs).orderBy(faqs.sortOrder);
+  }),
+
+  create: adminQuery
+    .input(z.object({
+      question: z.string(), questionAr: z.string(),
+      answer: z.string(), answerAr: z.string(),
+      category: z.string().optional(), sortOrder: z.number().default(0),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const [result] = await db.insert(faqs).values(input).$returningId();
+      return db.select().from(faqs).where(eq(faqs.id, result.id)).limit(1);
+    }),
+
+  update: adminQuery
+    .input(z.object({ id: z.number(), data: z.record(z.any()) }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      await db.update(faqs).set(input.data).where(eq(faqs.id, input.id));
+      return db.select().from(faqs).where(eq(faqs.id, input.id)).limit(1);
+    }),
+
+  delete: adminQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await getDb().delete(faqs).where(eq(faqs.id, input.id));
+      return { success: true };
+    }),
+});
+
+// ── Promo Codes ──
+const promoRouter = createRouter({
+  list: adminQuery.query(async () => {
+    return getDb().select().from(promoCodes).orderBy(desc(promoCodes.createdAt));
+  }),
+
+  create: adminQuery
+    .input(z.object({
+      code: z.string(), discountType: z.string(), discountValue: z.number(),
+      minOrderAmount: z.number().default(0), maxDiscount: z.number().optional(),
+      validFrom: z.string().optional(), validUntil: z.string().optional(),
+      usageLimit: z.number().optional(), isActive: z.boolean().default(true),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const [result] = await db.insert(promoCodes).values(input).$returningId();
+      return db.select().from(promoCodes).where(eq(promoCodes.id, result.id)).limit(1);
+    }),
+
+  delete: adminQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await getDb().delete(promoCodes).where(eq(promoCodes.id, input.id));
+      return { success: true };
     }),
 });
 
 // ── Audit Logs ──
 const auditRouter = createRouter({
   list: adminQuery
-    .input(z.object({
-      entity: z.string().optional(),
-      limit: z.number().default(100),
-    }).optional())
+    .input(z.object({ limit: z.number().default(100) }).optional())
     .query(async ({ input }) => {
-      const db = getDb();
-      let query = db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt));
-      if (input?.entity) {
-        query = query.where(eq(auditLogs.entity, input.entity)) as typeof query;
-      }
-      return query.limit(input?.limit || 100);
+      return getDb().select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(input?.limit ?? 100);
     }),
 
   create: adminQuery
     .input(z.object({
-      action: z.string(),
-      entity: z.string(),
-      entityId: z.string(),
-      details: z.string().optional(),
-      userName: z.string().optional(),
+      action: z.string(), entity: z.string(),
+      entityId: z.number().optional(), details: z.string().optional(),
+      user: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       const db = getDb();
@@ -496,161 +557,9 @@ const auditRouter = createRouter({
     }),
 });
 
-// ── Dashboard Stats ──
-const statsRouter = createRouter({
-  get: adminQuery.query(async () => {
-    const db = getDb();
-    const [productCount] = await db.select({ count: count() }).from(products);
-    const [activeProducts] = await db.select({ count: count() }).from(products).where(eq(products.isActive, true));
-    const [orderCount] = await db.select({ count: count() }).from(orders);
-    const [customerCount] = await db.select({ count: count() }).from(customers);
-    const [pendingWA] = await db.select({ count: count() }).from(orders).where(
-      and(eq(orders.orderStatus, "pending_confirmation"), eq(orders.whatsappConfirmed, false))
-    );
-    const [pendingWish] = await db.select({ count: count() }).from(orders).where(eq(orders.orderStatus, "payment_pending_whish"));
-    const [lowStock] = await db.select({ count: count() }).from(products).where(
-      sql`${products.stockQuantity} <= 5 AND ${products.stockQuantity} > 0`
-    );
-
-    return {
-      totalProducts: productCount.count,
-      activeProducts: activeProducts.count,
-      totalOrders: orderCount.count,
-      totalCustomers: customerCount.count,
-      pendingWA: pendingWA.count,
-      pendingWish: pendingWish.count,
-      lowStock: lowStock.count,
-    };
-  }),
-});
-
-// ── Email Queue ──
-const emailRouter = createRouter({
-  queue: adminQuery.query(async () => {
-    return getDb().select().from(emailQueue).orderBy(desc(emailQueue.createdAt)).limit(200);
-  }),
-
-  sendOrderNotification: publicQuery
-    .input(z.object({
-      orderNumber: z.string(),
-      customerName: z.string(),
-      customerPhone: z.string(),
-      grandTotal: z.number(),
-      paymentMethod: z.string(),
-    }))
-    .mutation(async ({ input }) => {
-      const db = getDb();
-      const recipients = env.notifyEmails;
-      for (const recipient of recipients) {
-        await db.insert(emailQueue).values({
-          recipient,
-          subject: `🛍️ New Order: ${input.orderNumber}`,
-          body: `A new order has been placed:\n\nOrder: ${input.orderNumber}\nCustomer: ${input.customerName}\nPhone: ${input.customerPhone}\nTotal: $${input.grandTotal}\nPayment: ${input.paymentMethod}`,
-          template: "order_notification",
-        });
-      }
-      return { success: true };
-    }),
-
-  sendWelcome: publicQuery
-    .input(z.object({ email: z.string(), name: z.string() }))
-    .mutation(async ({ input }) => {
-      const db = getDb();
-      await db.insert(emailQueue).values({
-        recipient: input.email,
-        subject: "Welcome to Miniyo! 💛",
-        body: `Hi ${input.name},\n\nWelcome to Miniyo! We're so excited to have you join our family of happy parents across Lebanon.\n\nShop our curated collection: https://miniyo.store\n\nWith love,\nThe Miniyo Team`,
-        template: "welcome",
-      });
-      return { success: true };
-    }),
-});
-
-// ── FAQ ──
-const faqRouter = createRouter({
-  list: publicQuery
-    .input(z.object({ category: z.string().optional() }).optional())
-    .query(async ({ input }) => {
-      const db = getDb();
-      if (input?.category) {
-        return db.select().from(faqs)
-          .where(eq(faqs.category, input.category))
-          .orderBy(faqs.sortOrder);
-      }
-      return db.select().from(faqs).orderBy(faqs.sortOrder);
-    }),
-});
-
-// ── Wishlist ──
-const wishlistRouter = createRouter({
-  list: publicQuery.query(async ({ ctx }) => {
-    if (!ctx.user) return [];
-    const db = getDb();
-    return db.select().from(wishlistItems)
-      .where(eq(wishlistItems.userId, ctx.user.id))
-      .orderBy(desc(wishlistItems.createdAt));
-  }),
-
-  add: publicQuery
-    .input(z.object({ productId: z.number() }))
-    .mutation(async ({ input, ctx }) => {
-      if (!ctx.user) throw new Error("Login required");
-      const db = getDb();
-      await db.insert(wishlistItems).values({
-        userId: ctx.user.id,
-        productId: input.productId,
-      }).onDuplicateKeyUpdate({ set: {} });
-      return { success: true };
-    }),
-
-  remove: publicQuery
-    .input(z.object({ productId: z.number() }))
-    .mutation(async ({ input, ctx }) => {
-      if (!ctx.user) throw new Error("Login required");
-      const db = getDb();
-      await db.delete(wishlistItems)
-        .where(and(
-          eq(wishlistItems.userId, ctx.user.id),
-          eq(wishlistItems.productId, input.productId)
-        ));
-      return { success: true };
-    }),
-});
-
-// ── Promo Code ──
-const promoRouter = createRouter({
-  validate: publicQuery
-    .input(z.object({ code: z.string(), orderTotal: z.number().optional() }))
-    .query(async ({ input }) => {
-      const db = getDb();
-      const code = await db.select().from(promoCodes)
-        .where(eq(promoCodes.code, input.code.toUpperCase()))
-        .limit(1);
-      if (!code[0]) return { valid: false, reason: "Invalid code" };
-
-      const promo = code[0];
-      if (!promo.isActive) return { valid: false, reason: "Code is inactive" };
-      if (new Date() > promo.validUntil) return { valid: false, reason: "Code expired" };
-      if (promo.usageLimit > 0 && promo.usageCount >= promo.usageLimit) {
-        return { valid: false, reason: "Usage limit reached" };
-      }
-      if (input.orderTotal && Number(promo.minOrderAmount) > 0 && input.orderTotal < Number(promo.minOrderAmount)) {
-        return { valid: false, reason: `Minimum order $${promo.minOrderAmount} required` };
-      }
-
-      return {
-        valid: true,
-        name: promo.name,
-        type: promo.type,
-        value: Number(promo.value),
-        maxDiscount: promo.maxDiscount ? Number(promo.maxDiscount) : undefined,
-      };
-    }),
-});
-
-// ── Inventory ──
+// ── Inventory Movements ──
 const inventoryRouter = createRouter({
-  movements: adminQuery
+  list: adminQuery
     .input(z.object({ productId: z.number().optional() }).optional())
     .query(async ({ input }) => {
       const db = getDb();
@@ -659,57 +568,95 @@ const inventoryRouter = createRouter({
           .where(eq(inventoryMovements.productId, input.productId))
           .orderBy(desc(inventoryMovements.createdAt));
       }
-      return db.select().from(inventoryMovements).orderBy(desc(inventoryMovements.createdAt));
+      return db.select().from(inventoryMovements).orderBy(desc(inventoryMovements.createdAt)).limit(200);
     }),
 
-  adjust: adminQuery
+  create: adminQuery
     .input(z.object({
-      productId: z.number(),
-      quantity: z.number(),
-      reason: z.string(),
-      type: z.enum(["restock", "adjustment"]),
+      productId: z.number(), movementType: z.string(),
+      quantity: z.number(), reason: z.string().optional(),
+      reference: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      const product = await db.select().from(products)
-        .where(eq(products.id, input.productId))
-        .limit(1);
-      if (!product[0]) throw new Error("Product not found");
+      const [result] = await db.insert(inventoryMovements).values(input).$returningId();
 
-      const previousStock = product[0].stockQuantity;
-      const newStock = Math.max(0, previousStock + input.quantity);
+      // Also update the product stock
+      if (input.movementType === "in") {
+        await db.update(products)
+          .set({ stockQuantity: sql`${products.stockQuantity} + ${input.quantity}` })
+          .where(eq(products.id, input.productId));
+      } else if (input.movementType === "out" || input.movementType === "adjustment") {
+        await db.update(products)
+          .set({ stockQuantity: sql`${products.stockQuantity} - ${input.quantity}` })
+          .where(eq(products.id, input.productId));
+      }
 
-      await db.update(products)
-        .set({ stockQuantity: newStock })
-        .where(eq(products.id, input.productId));
-
-      await db.insert(inventoryMovements).values({
-        productId: input.productId,
-        type: input.type,
-        quantity: input.quantity,
-        previousStock,
-        newStock,
-        reason: input.reason,
-      });
-
-      return { previousStock, newStock };
+      return db.select().from(inventoryMovements).where(eq(inventoryMovements.id, result.id)).limit(1);
     }),
 });
 
-// ── Combined Miniyo Router ──
-export const miniyoRouter = createRouter({
-  product: productRouter,
-  category: categoryRouter,
-  order: orderRouter,
-  customer: customerRouter,
+// ── Wishlist ──
+const wishlistRouter = createRouter({
+  get: publicQuery
+    .input(z.object({ sessionId: z.string() }))
+    .query(async ({ input }) => {
+      return getDb().select().from(wishlistItems).where(eq(wishlistItems.sessionId, input.sessionId));
+    }),
+
+  add: publicQuery
+    .input(z.object({ sessionId: z.string(), productId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      const existing = await db.select().from(wishlistItems)
+        .where(and(eq(wishlistItems.sessionId, input.sessionId), eq(wishlistItems.productId, input.productId)))
+        .limit(1);
+      if (existing[0]) return existing[0];
+      const [result] = await db.insert(wishlistItems).values(input).$returningId();
+      return db.select().from(wishlistItems).where(eq(wishlistItems.id, result.id)).limit(1);
+    }),
+
+  remove: publicQuery
+    .input(z.object({ sessionId: z.string(), productId: z.number() }))
+    .mutation(async ({ input }) => {
+      await getDb().delete(wishlistItems)
+        .where(and(eq(wishlistItems.sessionId, input.sessionId), eq(wishlistItems.productId, input.productId)));
+      return { success: true };
+    }),
+});
+
+// ── Stats (Admin Dashboard) ──
+const statsRouter = createRouter({
+  summary: adminQuery.query(async () => {
+    const db = getDb();
+    const [orderCount] = await db.select({ count: count() }).from(orders);
+    const [productCount] = await db.select({ count: count() }).from(products);
+    const [customerCount] = await db.select({ count: count() }).from(customers);
+    const recentOrders = await db.select().from(orders).orderBy(desc(orders.createdAt)).limit(5);
+    return {
+      totalOrders: orderCount.count,
+      totalProducts: productCount.count,
+      totalCustomers: customerCount.count,
+      recentOrders,
+    };
+  }),
+});
+
+// ── Root Router ──
+export const appRouter = createRouter({
+  products: productRouter,
+  categories: categoryRouter,
+  orders: orderRouter,
+  customers: customerRouter,
   media: mediaRouter,
   cms: cmsRouter,
-  settings: settingsRouter,
+  siteSettings: siteSettingsRouter,
+  faqs: faqRouter,
+  promos: promoRouter,
   audit: auditRouter,
-  stats: statsRouter,
-  email: emailRouter,
-  faq: faqRouter,
-  wishlist: wishlistRouter,
-  promo: promoRouter,
   inventory: inventoryRouter,
+  wishlist: wishlistRouter,
+  stats: statsRouter,
 });
+
+export type AppRouter = typeof appRouter;

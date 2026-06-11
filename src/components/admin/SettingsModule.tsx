@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import {
   Store, CreditCard, Truck, Tag, Users, ClipboardList, Save, Check,
-  Shield, DollarSign, Package, Lock, X, UserPlus, Trash2, Image, Terminal
+  Shield, DollarSign, Package, Lock, X, UserPlus, Trash2, Image, Settings2
 } from 'lucide-react'
 import { useAdminStore } from '@/stores/adminStore'
-import { EnvConfigModule } from './EnvConfigModule'
+import { ConfigModule } from './ConfigModule'
 
 interface StaffMember {
   id: string
@@ -16,24 +16,21 @@ interface StaffMember {
 }
 
 const initialStaff: StaffMember[] = [
-  // Primary owner — uses Gmail until GoDaddy email is fully propagated
-  { id: 's1', name: 'Omran', email: 'miniyo.store.lb@gmail.com', role: 'super_admin', status: 'active', lastLogin: new Date().toISOString().slice(0, 10) },
-  // GoDaddy professional mailboxes (in setup — will be active once DNS propagates)
-  { id: 's2', name: 'Admin',      email: 'admin@miniyo.store',      role: 'super_admin', status: 'active', lastLogin: '-' },
-  { id: 's3', name: 'Management', email: 'Management@miniyo.store', role: 'admin',       status: 'active', lastLogin: '-' },
-  { id: 's4', name: 'Marketing',  email: 'marketing@miniyo.store',  role: 'staff',       status: 'active', lastLogin: '-' },
+  { id: 's1', name: 'Omran', email: 'Management@miniyo.store', role: 'super_admin', status: 'active', lastLogin: new Date().toISOString().slice(0, 10) },
+  { id: 's2', name: 'Ahmad K.', email: 'admin@miniyo.store', role: 'admin', status: 'active', lastLogin: new Date().toISOString().slice(0, 10) },
+  { id: 's3', name: 'Marketing', email: 'marketing@miniyo.store', role: 'staff', status: 'active', lastLogin: '-' },
 ]
 
-type SubSection = 'general' | 'payments' | 'shipping' | 'discounts' | 'staff' | 'audit' | 'env'
+type SubSection = 'general' | 'payments' | 'shipping' | 'discounts' | 'staff' | 'audit' | 'configuration'
 
 const navItems: { key: SubSection; label: string; icon: typeof Store }[] = [
-  { key: 'general',  label: 'General',       icon: Store },
-  { key: 'payments', label: 'Payments',       icon: CreditCard },
-  { key: 'shipping', label: 'Shipping',       icon: Truck },
-  { key: 'discounts',label: 'Discounts',      icon: Tag },
-  { key: 'staff',    label: 'Staff & Roles',  icon: Users },
-  { key: 'audit',    label: 'Audit Log',      icon: ClipboardList },
-  { key: 'env',      label: 'Env Config',     icon: Terminal },
+  { key: 'general', label: 'General', icon: Store },
+  { key: 'payments', label: 'Payments', icon: CreditCard },
+  { key: 'shipping', label: 'Shipping', icon: Truck },
+  { key: 'discounts', label: 'Discounts', icon: Tag },
+  { key: 'staff', label: 'Staff & Roles', icon: Users },
+  { key: 'audit', label: 'Audit Log', icon: ClipboardList },
+  { key: 'configuration', label: 'Configuration', icon: Settings2 },
 ]
 
 export function SettingsModule({ section }: { section?: string }) {
@@ -115,12 +112,11 @@ export function SettingsModule({ section }: { section?: string }) {
                 />
               </div>
               <div>
-                <label className="text-xs text-[#8B8578] mb-1 block">Contact Email</label>
+                <label className="text-xs text-[#8B8578] mb-1 block">Email</label>
                 <input
                   type="email"
                   value={form.email || ''}
                   onChange={e => setForm(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="admin@miniyo.store"
                   className="w-full h-10 border border-[#D4CFC6] rounded-lg px-3 text-sm bg-white outline-none focus:border-[#8FAE7B]"
                 />
               </div>
@@ -201,7 +197,12 @@ export function SettingsModule({ section }: { section?: string }) {
             <h3 className="font-semibold text-[#2D5A4C] text-sm">Payment Methods</h3>
             <div className="space-y-3">
               <label className="flex items-center gap-3 bg-white rounded-xl border border-[#D4CFC6] p-4 cursor-pointer hover:border-[#8FAE7B] transition-colors">
-                <input type="checkbox" checked={form.codEnabled} onChange={e => setForm(prev => ({ ...prev, codEnabled: e.target.checked }))} className="w-4 h-4 accent-[#2D5A4C]" />
+                <input
+                  type="checkbox"
+                  checked={form.codEnabled}
+                  onChange={e => setForm(prev => ({ ...prev, codEnabled: e.target.checked }))}
+                  className="w-4 h-4 accent-[#2D5A4C]"
+                />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-[#2D5A4C]">Cash on Delivery (CoD)</p>
                   <p className="text-xs text-[#A8A396]">Customers pay when they receive their order</p>
@@ -209,7 +210,12 @@ export function SettingsModule({ section }: { section?: string }) {
                 <Package size={18} className="text-[#8FAE7B]" />
               </label>
               <label className="flex items-center gap-3 bg-white rounded-xl border border-[#D4CFC6] p-4 cursor-pointer hover:border-[#8FAE7B] transition-colors">
-                <input type="checkbox" checked={form.wishEnabled} onChange={e => setForm(prev => ({ ...prev, wishEnabled: e.target.checked }))} className="w-4 h-4 accent-[#2D5A4C]" />
+                <input
+                  type="checkbox"
+                  checked={form.wishEnabled}
+                  onChange={e => setForm(prev => ({ ...prev, wishEnabled: e.target.checked }))}
+                  className="w-4 h-4 accent-[#2D5A4C]"
+                />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-[#2D5A4C]">Wish Money Transfer</p>
                   <p className="text-xs text-[#A8A396]">Customers pay via Wish app, you verify manually</p>
@@ -229,7 +235,12 @@ export function SettingsModule({ section }: { section?: string }) {
                 <label className="text-xs text-[#8B8578] mb-1 block">Free Shipping Threshold</label>
                 <div className="relative">
                   <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A8A396]" />
-                  <input type="number" value={form.freeShippingThreshold} onChange={e => setForm(prev => ({ ...prev, freeShippingThreshold: Number(e.target.value) }))} className="w-full h-10 border border-[#D4CFC6] rounded-lg pl-8 pr-3 text-sm bg-white outline-none focus:border-[#8FAE7B]" />
+                  <input
+                    type="number"
+                    value={form.freeShippingThreshold}
+                    onChange={e => setForm(prev => ({ ...prev, freeShippingThreshold: Number(e.target.value) }))}
+                    className="w-full h-10 border border-[#D4CFC6] rounded-lg pl-8 pr-3 text-sm bg-white outline-none focus:border-[#8FAE7B]"
+                  />
                 </div>
                 <p className="text-xs text-[#A8A396] mt-1">Orders above this amount get free delivery</p>
               </div>
@@ -237,7 +248,12 @@ export function SettingsModule({ section }: { section?: string }) {
                 <label className="text-xs text-[#8B8578] mb-1 block">Standard Delivery Fee</label>
                 <div className="relative">
                   <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A8A396]" />
-                  <input type="number" value={form.standardDeliveryFee} onChange={e => setForm(prev => ({ ...prev, standardDeliveryFee: Number(e.target.value) }))} className="w-full h-10 border border-[#D4CFC6] rounded-lg pl-8 pr-3 text-sm bg-white outline-none focus:border-[#8FAE7B]" />
+                  <input
+                    type="number"
+                    value={form.standardDeliveryFee}
+                    onChange={e => setForm(prev => ({ ...prev, standardDeliveryFee: Number(e.target.value) }))}
+                    className="w-full h-10 border border-[#D4CFC6] rounded-lg pl-8 pr-3 text-sm bg-white outline-none focus:border-[#8FAE7B]"
+                  />
                 </div>
                 <p className="text-xs text-[#A8A396] mt-1">Default delivery charge for Lebanon</p>
               </div>
@@ -245,7 +261,12 @@ export function SettingsModule({ section }: { section?: string }) {
                 <label className="text-xs text-[#8B8578] mb-1 block">Express Delivery Fee</label>
                 <div className="relative">
                   <DollarSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A8A396]" />
-                  <input type="number" value={form.expressDeliveryFee} onChange={e => setForm(prev => ({ ...prev, expressDeliveryFee: Number(e.target.value) }))} className="w-full h-10 border border-[#D4CFC6] rounded-lg pl-8 pr-3 text-sm bg-white outline-none focus:border-[#8FAE7B]" />
+                  <input
+                    type="number"
+                    value={form.expressDeliveryFee}
+                    onChange={e => setForm(prev => ({ ...prev, expressDeliveryFee: Number(e.target.value) }))}
+                    className="w-full h-10 border border-[#D4CFC6] rounded-lg pl-8 pr-3 text-sm bg-white outline-none focus:border-[#8FAE7B]"
+                  />
                 </div>
                 <p className="text-xs text-[#A8A396] mt-1">Same-day or next-day delivery charge</p>
               </div>
@@ -270,7 +291,10 @@ export function SettingsModule({ section }: { section?: string }) {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-[#2D5A4C] text-sm">Team Members</h3>
-              <button onClick={() => setShowStaffForm(true)} className="h-8 px-3 bg-[#2D5A4C] text-white text-xs rounded-lg hover:bg-[#1e4539] transition-colors flex items-center gap-1.5">
+              <button
+                onClick={() => setShowStaffForm(true)}
+                className="h-8 px-3 bg-[#2D5A4C] text-white text-xs rounded-lg hover:bg-[#1e4539] transition-colors flex items-center gap-1.5"
+              >
                 <UserPlus size={13} /> Add Member
               </button>
             </div>
@@ -279,17 +303,36 @@ export function SettingsModule({ section }: { section?: string }) {
               <div className="bg-white rounded-xl border border-[#D4CFC6] p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-[#2D5A4C]">New Team Member</p>
-                  <button onClick={() => setShowStaffForm(false)} className="text-[#A8A396] hover:text-[#2D5A4C]"><X size={14} /></button>
+                  <button onClick={() => setShowStaffForm(false)} className="text-[#A8A396] hover:text-[#2D5A4C]">
+                    <X size={14} />
+                  </button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <input value={staffForm.name} onChange={e => setStaffForm(prev => ({ ...prev, name: e.target.value }))} placeholder="Name" className="h-9 border border-[#D4CFC6] rounded-lg px-3 text-sm bg-white outline-none focus:border-[#8FAE7B]" />
-                  <input value={staffForm.email} onChange={e => setStaffForm(prev => ({ ...prev, email: e.target.value }))} placeholder="Email" className="h-9 border border-[#D4CFC6] rounded-lg px-3 text-sm bg-white outline-none focus:border-[#8FAE7B]" />
-                  <select value={staffForm.role} onChange={e => setStaffForm(prev => ({ ...prev, role: e.target.value as 'staff' }))} className="h-9 border border-[#D4CFC6] rounded-lg px-3 text-sm bg-white outline-none focus:border-[#8FAE7B]">
+                  <input
+                    value={staffForm.name}
+                    onChange={e => setStaffForm(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Name"
+                    className="h-9 border border-[#D4CFC6] rounded-lg px-3 text-sm bg-white outline-none focus:border-[#8FAE7B]"
+                  />
+                  <input
+                    value={staffForm.email}
+                    onChange={e => setStaffForm(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="Email"
+                    className="h-9 border border-[#D4CFC6] rounded-lg px-3 text-sm bg-white outline-none focus:border-[#8FAE7B]"
+                  />
+                  <select
+                    value={staffForm.role}
+                    onChange={e => setStaffForm(prev => ({ ...prev, role: e.target.value as 'staff' }))}
+                    className="h-9 border border-[#D4CFC6] rounded-lg px-3 text-sm bg-white outline-none focus:border-[#8FAE7B]"
+                  >
                     <option value="staff">Staff</option>
                     <option value="admin">Admin</option>
                   </select>
                 </div>
-                <button onClick={addStaff} className="h-8 px-4 bg-[#2D5A4C] text-white text-xs rounded-lg hover:bg-[#1e4539] transition-colors flex items-center gap-1.5">
+                <button
+                  onClick={addStaff}
+                  className="h-8 px-4 bg-[#2D5A4C] text-white text-xs rounded-lg hover:bg-[#1e4539] transition-colors flex items-center gap-1.5"
+                >
                   <Check size={12} /> Add
                 </button>
               </div>
@@ -318,17 +361,26 @@ export function SettingsModule({ section }: { section?: string }) {
                             member.role === 'super_admin' ? 'bg-purple-50 text-purple-600' :
                             member.role === 'admin' ? 'bg-blue-50 text-blue-600' :
                             'bg-gray-100 text-gray-600'
-                          }`}>{member.role.replace('_', ' ')}</span>
+                          }`}>
+                            {member.role.replace('_', ' ')}
+                          </span>
                         </td>
                         <td className="px-4 py-3">
                           <span className={`text-xs px-2 py-0.5 rounded-full ${
                             member.status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'
-                          }`}>{member.status}</span>
+                          }`}>
+                            {member.status}
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-[#A8A396] text-xs">{member.lastLogin}</td>
                         <td className="px-4 py-3">
                           {member.role !== 'super_admin' && (
-                            <button onClick={() => removeStaff(member.id)} className="text-red-400 hover:text-red-600 transition-colors"><Trash2 size={14} /></button>
+                            <button
+                              onClick={() => removeStaff(member.id)}
+                              className="text-red-400 hover:text-red-600 transition-colors"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           )}
                         </td>
                       </tr>
@@ -384,7 +436,9 @@ export function SettingsModule({ section }: { section?: string }) {
                               log.action.includes('UPDATE') || log.action.includes('CHANGE') ? 'bg-blue-50 text-blue-600' :
                               log.action.includes('CREATE') || log.action.includes('ADD') ? 'bg-emerald-50 text-emerald-600' :
                               'bg-gray-100 text-gray-600'
-                            }`}>{log.action}</span>
+                            }`}>
+                              {log.action}
+                            </span>
                           </td>
                           <td className="px-4 py-3 text-[#2D5A4C]">{log.entity}</td>
                           <td className="px-4 py-3 text-[#5C6B60] max-w-xs truncate">{log.details}</td>
@@ -399,8 +453,8 @@ export function SettingsModule({ section }: { section?: string }) {
           </div>
         )
 
-      case 'env':
-        return <EnvConfigModule />
+      case 'configuration':
+        return <ConfigModule />
     }
   }
 
@@ -432,7 +486,7 @@ export function SettingsModule({ section }: { section?: string }) {
         {renderContent()}
       </div>
 
-      {/* Save Button (for settings tabs only) */}
+      {/* Save Button (for settings tabs only — not config or audit) */}
       {(activeTab === 'general' || activeTab === 'payments' || activeTab === 'shipping') && (
         <div className="flex items-center gap-3">
           <button
