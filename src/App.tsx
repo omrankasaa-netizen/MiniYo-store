@@ -38,13 +38,9 @@ function ScrollToTop() {
 function PageTransition({ children }: { children: React.ReactNode }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
+      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-    >
-      {children}
-    </motion.div>
+    >{children}</motion.div>
   )
 }
 
@@ -54,19 +50,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-function MainLayout({ locale, onLocaleChange, children }: {
-  locale: Locale
-  onLocaleChange: (l: Locale) => void
-  children: React.ReactNode
-}) {
+function MainLayout({ locale, onLocaleChange, children }: { locale: Locale; onLocaleChange: (l: Locale) => void; children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col">
       <AnnouncementBar locale={locale} />
       <TopNavigation locale={locale} onLocaleChange={onLocaleChange} />
       <CartDrawer locale={locale} />
-      <main className="flex-1 pt-[108px]">
-        <PageTransition>{children}</PageTransition>
-      </main>
+      <main className="flex-1 pt-[108px]"><PageTransition>{children}</PageTransition></main>
       <Footer locale={locale} />
       <BackToTop />
       <AbandonedCartRecovery />
@@ -80,15 +70,15 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
-        {/* Auth Pages */}
+        {/* Customer auth */}
         <Route path="/login" element={<LoginPage locale={locale} />} />
         <Route path="/register" element={<RegisterPage locale={locale} />} />
 
-        {/* Admin — uses its own DB-backed JWT auth, no customer session needed */}
+        {/* Admin — fully independent auth, no customer session required */}
         <Route path="/admin-login" element={<AdminLoginPage />} />
         <Route path="/admin" element={<AdminPage />} />
 
-        {/* Main Storefront */}
+        {/* Storefront */}
         <Route path="/" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><HomePage locale={locale} /></MainLayout>} />
         <Route path="/shop" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><ShopPage locale={locale} /></MainLayout>} />
         <Route path="/product/:handle" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><ProductPage locale={locale} /></MainLayout>} />
@@ -105,11 +95,10 @@ function AppRoutes({ locale, onLocaleChange }: { locale: Locale; onLocaleChange:
         <Route path="/account" element={<MainLayout locale={locale} onLocaleChange={onLocaleChange}><ProtectedRoute><MemberAreaPage locale={locale} /></ProtectedRoute></MainLayout>} />
         <Route path="*" element={
           <MainLayout locale={locale} onLocaleChange={onLocaleChange}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem', textAlign: 'center', padding: '2rem' }}>
-              <h1 style={{ fontSize: '3rem', fontWeight: 700, opacity: 0.15 }}>404</h1>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Page Not Found</h2>
-              <p style={{ color: 'var(--color-text-muted, #888)', maxWidth: '40ch' }}>The page you are looking for doesn&apos;t exist or has been moved.</p>
-              <a href="/#/" style={{ marginTop: '1rem', padding: '0.75rem 1.5rem', background: 'var(--color-primary, #01696f)', color: '#fff', borderRadius: '0.5rem', textDecoration: 'none', fontWeight: 600 }}>Back to Home</a>
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'60vh', gap:'1rem', textAlign:'center', padding:'2rem' }}>
+              <h1 style={{ fontSize:'3rem', fontWeight:700, opacity:0.15 }}>404</h1>
+              <h2 style={{ fontSize:'1.5rem', fontWeight:600 }}>Page Not Found</h2>
+              <a href="/#/" style={{ marginTop:'1rem', padding:'0.75rem 1.5rem', background:'var(--color-primary,#01696f)', color:'#fff', borderRadius:'0.5rem', textDecoration:'none', fontWeight:600 }}>Back to Home</a>
             </div>
           </MainLayout>
         } />
